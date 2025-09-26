@@ -266,6 +266,7 @@ class ProjectsView(QWidget):
         self.current_project_id = None
         self.init_ui()
         self.load_masters()
+        self.set_default_filters()
         self.refresh_data()
     
     def init_ui(self):
@@ -548,6 +549,41 @@ class ProjectsView(QWidget):
                     item.setData(Qt.UserRole, tech.id)
                     list_widget.addItem(item)
     
+    def set_default_filters(self):
+        """デフォルトのフィルタを設定（全期間）"""
+        # 最も古いプロジェクトの開始日を取得
+        try:
+            with db_service.session_scope() as session:
+                repo = Repository(session)
+                projects = repo.get_all_projects()
+                
+                if projects:
+                    # 最も古い開始日を探す
+                    oldest_date = None
+                    for project in projects:
+                        if project.project_start:
+                            project_date = QDate.fromString(project.project_start, "yyyy-MM-dd")
+                            if project_date.isValid():
+                                if oldest_date is None or project_date < oldest_date:
+                                    oldest_date = project_date
+                    
+                    # デフォルト値を設定
+                    if oldest_date:
+                        self.start_date.setDate(oldest_date)
+                    else:
+                        self.start_date.setDate(QDate.currentDate().addYears(-10))
+                    
+                    self.end_date.setDate(QDate.currentDate())
+                else:
+                    # プロジェクトがない場合のデフォルト
+                    self.start_date.setDate(QDate.currentDate().addYears(-10))
+                    self.end_date.setDate(QDate.currentDate())
+        except Exception as e:
+            print(f"フィルタ設定エラー: {e}")
+            # エラー時のデフォルト
+            self.start_date.setDate(QDate.currentDate().addYears(-10))
+            self.end_date.setDate(QDate.currentDate())
+    
     def refresh_data(self):
         filters = {}
         
@@ -671,6 +707,7 @@ class ProjectsView(QWidget):
     
     def save_project(self):
         try:
+            is_new_project = False
             data = {
                 'name': self.name_edit.text(),
                 'work_summary': self.summary_edit.toPlainText(),
@@ -690,6 +727,7 @@ class ProjectsView(QWidget):
                 else:
                     project = repo.create_project(data)
                     self.current_project_id = project.id
+                    is_new_project = True
                 
                 tech_lists = [
                     ('os', self.os_list),
@@ -707,6 +745,24 @@ class ProjectsView(QWidget):
                         if item.isSelected():
                             selected_ids.append(item.data(Qt.UserRole))
                     repo.link_project_tech(self.current_project_id, kind, selected_ids)
+                
+                # 新規プロジェクトまたは技術使用期間がなければ自動生成
+                if is_new_project:
+                    # 新規プロジェクトは必ず自動生成
+                    repo.auto_generate_tech_usages_from_project(self.current_project_id)
+                else:
+                    # 既存プロジェクトで技術使用期間がなければ自動生成
+                    tech_usages = repo.get_tech_usages_by_project(self.current_project_id)
+                    if not tech_usages:
+                        # 紐付いている技術があるか確認
+                        has_techs = False
+                        for kind in ['os', 'language', 'framework', 'tool', 'cloud', 'db']:
+                            if repo.get_project_techs(self.current_project_id, kind):
+                                has_techs = True
+                                break
+                        
+                        if has_techs:
+                            repo.auto_generate_tech_usages_from_project(self.current_project_id)
                 
                 for row in range(self.engagement_model.rowCount()):
                     eng_id = self.engagement_model.item(row, 0).data(Qt.UserRole)

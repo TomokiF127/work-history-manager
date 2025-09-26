@@ -172,7 +172,9 @@ class StatsView(QWidget):
     def __init__(self):
         super().__init__()
         self.init_ui()
-        self.refresh_stats()
+        self.set_default_filters()
+        # デフォルトフィルタの値で統計を表示
+        self.apply_filter()
     
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -252,6 +254,39 @@ class StatsView(QWidget):
         self.start_date.setDate(self.start_date.minimumDate())
         self.end_date.setDate(self.end_date.minimumDate())
         self.refresh_stats()
+    
+    def set_default_filters(self):
+        """デフォルトのフィルタを設定（全期間）"""
+        try:
+            from services.db import db_service
+            from services.repository import Repository
+            
+            with db_service.session_scope() as session:
+                repo = Repository(session)
+                projects = repo.get_all_projects()
+                
+                if projects:
+                    # 最も古い開始日を探す
+                    oldest_date = None
+                    for project in projects:
+                        if project.project_start:
+                            project_date = QDate.fromString(project.project_start, "yyyy-MM-dd")
+                            if project_date.isValid():
+                                if oldest_date is None or project_date < oldest_date:
+                                    oldest_date = project_date
+                    
+                    # デフォルト値を設定（全期間）
+                    if oldest_date:
+                        self.start_date.setDate(oldest_date)
+                    else:
+                        self.start_date.setDate(QDate.currentDate().addYears(-10))
+                    
+                    self.end_date.setDate(QDate.currentDate())
+                else:
+                    # プロジェクトがない場合（何も指定しない）
+                    pass
+        except Exception as e:
+            print(f"統計フィルタ設定エラー: {e}")
     
     def refresh_stats(self, start_filter=None, end_filter=None):
         try:

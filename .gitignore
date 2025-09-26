@@ -143,3 +143,4 @@ ehthumbs_vista.db
 
 # Application specific
 test_db.py
+import_*.py
