@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import os
+import locale
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QLocale
 from ui.main_window import MainWindow
 from services.db import db_service
 from services.seed import seed_initial_data
@@ -13,6 +14,18 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("職務経歴管理ツール")
     app.setOrganizationName("WorkHistory")
+    
+    # 日本語ロケールを設定
+    try:
+        locale.setlocale(locale.LC_TIME, 'ja_JP.UTF-8')
+    except:
+        try:
+            locale.setlocale(locale.LC_TIME, 'Japanese_Japan.932')
+        except:
+            pass
+    
+    # Qtロケールを日本語に設定
+    QLocale.setDefault(QLocale(QLocale.Language.Japanese, QLocale.Country.Japan))
     
     os.makedirs("./data", exist_ok=True)
     

@@ -90,28 +90,33 @@ class CategoryStatsTab(QWidget):
         self.start_filter = start_filter
         self.end_filter = end_filter
         
-        with db_service.session_scope() as session:
-            stats_service = StatsService(session)
-            stats_data = stats_service.get_all_tech_stats(
-                self.kind, start_filter, end_filter
-            )
-            self.model.update_data(stats_data)
-            
-            total_techs = len(stats_data)
-            total_months = sum(item['months'] for item in stats_data)
-            
-            period_text = ""
-            if start_filter or end_filter:
-                if start_filter and end_filter:
-                    period_text = f" (期間: {start_filter} ~ {end_filter})"
-                elif start_filter:
-                    period_text = f" (期間: {start_filter} ~)"
-                else:
-                    period_text = f" (期間: ~ {end_filter})"
-            
-            self.summary_label.setText(
-                f"{self.title}: {total_techs}件 / 合計{total_months}ヶ月{period_text}"
-            )
+        try:
+            with db_service.session_scope() as session:
+                stats_service = StatsService(session)
+                stats_data = stats_service.get_all_tech_stats(
+                    self.kind, start_filter, end_filter
+                )
+                self.model.update_data(stats_data)
+                
+                total_techs = len(stats_data)
+                total_months = sum(item['months'] for item in stats_data)
+                
+                period_text = ""
+                if start_filter or end_filter:
+                    if start_filter and end_filter:
+                        period_text = f" (期間: {start_filter} ~ {end_filter})"
+                    elif start_filter:
+                        period_text = f" (期間: {start_filter} ~)"
+                    else:
+                        period_text = f" (期間: ~ {end_filter})"
+                
+                self.summary_label.setText(
+                    f"{self.title}: {total_techs}件 / 合計{total_months}ヶ月{period_text}"
+                )
+        except Exception as e:
+            print(f"統計データ取得エラー: {e}")
+            self.model.update_data([])
+            self.summary_label.setText(f"{self.title}: データなし")
     
     def export_csv(self):
         file_path, _ = QFileDialog.getSaveFileName(
@@ -179,14 +184,14 @@ class StatsView(QWidget):
         self.start_date = QDateEdit()
         self.start_date.setCalendarPopup(True)
         self.start_date.setSpecialValueText("指定なし")
-        self.start_date.setDisplayFormat("yyyy-MM-dd")
+        self.start_date.setDisplayFormat("yyyy年MM月dd日")
         filter_layout.addWidget(self.start_date)
         
         filter_layout.addWidget(QLabel("終了:"))
         self.end_date = QDateEdit()
         self.end_date.setCalendarPopup(True)
         self.end_date.setSpecialValueText("指定なし")
-        self.end_date.setDisplayFormat("yyyy-MM-dd")
+        self.end_date.setDisplayFormat("yyyy年MM月dd日")
         filter_layout.addWidget(self.end_date)
         
         self.apply_filter_button = QPushButton("フィルタ適用")
@@ -249,8 +254,11 @@ class StatsView(QWidget):
         self.refresh_stats()
     
     def refresh_stats(self, start_filter=None, end_filter=None):
-        for tab in self.category_tabs.values():
-            tab.refresh_stats(start_filter, end_filter)
+        try:
+            for tab in self.category_tabs.values():
+                tab.refresh_stats(start_filter, end_filter)
+        except Exception as e:
+            print(f"統計更新エラー: {e}")
         
         with db_service.session_scope() as session:
             stats_service = StatsService(session)

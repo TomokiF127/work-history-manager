@@ -176,13 +176,13 @@ class TechUsageDialog(QDialog):
         start_edit = QDateEdit()
         start_edit.setCalendarPopup(True)
         start_edit.setDate(QDate.currentDate())
-        start_edit.setDisplayFormat("yyyy-MM-dd")
+        start_edit.setDisplayFormat("yyyy年MM月dd日")
         layout.addRow("開始日:", start_edit)
         
         end_edit = QDateEdit()
         end_edit.setCalendarPopup(True)
         end_edit.setDate(QDate.currentDate())
-        end_edit.setDisplayFormat("yyyy-MM-dd")
+        end_edit.setDisplayFormat("yyyy年MM月dd日")
         end_edit.setSpecialValueText("継続中")
         layout.addRow("終了日:", end_edit)
         
@@ -285,14 +285,14 @@ class ProjectsView(QWidget):
         self.start_date = QDateEdit()
         self.start_date.setCalendarPopup(True)
         self.start_date.setSpecialValueText("指定なし")
-        self.start_date.setDisplayFormat("yyyy-MM-dd")
+        self.start_date.setDisplayFormat("yyyy年MM月dd日")
         date_layout.addWidget(self.start_date)
         
         date_layout.addWidget(QLabel("〜"))
         self.end_date = QDateEdit()
         self.end_date.setCalendarPopup(True)
         self.end_date.setSpecialValueText("指定なし")
-        self.end_date.setDisplayFormat("yyyy-MM-dd")
+        self.end_date.setDisplayFormat("yyyy年MM月dd日")
         date_layout.addWidget(self.end_date)
         filter_layout.addLayout(date_layout)
         
@@ -315,6 +315,20 @@ class ProjectsView(QWidget):
         self.project_table.setModel(self.project_model)
         self.project_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.project_table.selectionModel().selectionChanged.connect(self.on_project_selected)
+        
+        # 横スクロールを有効化し、カラムサイズを調整
+        self.project_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.project_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.project_table.horizontalHeader().setStretchLastSection(False)
+        self.project_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        
+        # 各カラムの初期幅を設定
+        header = self.project_table.horizontalHeader()
+        header.resizeSection(0, 200)  # プロジェクト名
+        header.resizeSection(1, 100)  # 役割
+        header.resizeSection(2, 180)  # 期間
+        header.resizeSection(3, 150)  # 規模
+        
         left_layout.addWidget(self.project_table)
         
         button_layout = QHBoxLayout()
@@ -367,64 +381,80 @@ class ProjectsView(QWidget):
     def init_overview_tab(self):
         layout = QVBoxLayout(self.overview_tab)
         
-        form_layout = QHBoxLayout()
-        left_form = QVBoxLayout()
-        right_form = QVBoxLayout()
+        # 上部: プロジェクト概要情報
+        overview_group = QGroupBox("プロジェクト概要")
+        overview_layout = QVBoxLayout()
         
+        # プロジェクト名
         name_layout = QHBoxLayout()
         name_layout.addWidget(QLabel("プロジェクト名:"))
         self.name_edit = QLineEdit()
         name_layout.addWidget(self.name_edit)
-        left_form.addLayout(name_layout)
+        overview_layout.addLayout(name_layout)
         
+        # 期間・役割・作業を1行に
+        basic_info_layout = QHBoxLayout()
+        
+        # 期間
+        basic_info_layout.addWidget(QLabel("期間:"))
+        self.project_start = QDateEdit()
+        self.project_start.setCalendarPopup(True)
+        self.project_start.setDisplayFormat("yyyy年MM月dd日")
+        basic_info_layout.addWidget(self.project_start)
+        
+        basic_info_layout.addWidget(QLabel("〜"))
+        self.project_end = QDateEdit()
+        self.project_end.setCalendarPopup(True)
+        self.project_end.setSpecialValueText("継続中")
+        self.project_end.setDisplayFormat("yyyy年MM月dd日")
+        basic_info_layout.addWidget(self.project_end)
+        
+        basic_info_layout.addStretch()
+        
+        # 役割
+        basic_info_layout.addWidget(QLabel("役割:"))
+        self.role_combo = QComboBox()
+        basic_info_layout.addWidget(self.role_combo)
+        
+        # 作業
+        basic_info_layout.addWidget(QLabel("作業:"))
+        self.task_combo = QComboBox()
+        basic_info_layout.addWidget(self.task_combo)
+        
+        # 規模
+        basic_info_layout.addWidget(QLabel("規模:"))
+        self.scale_edit = QLineEdit()
+        self.scale_edit.setPlaceholderText("例: 要員約12名")
+        basic_info_layout.addWidget(self.scale_edit)
+        
+        overview_layout.addLayout(basic_info_layout)
+        
+        # 業務内容
         summary_layout = QVBoxLayout()
         summary_layout.addWidget(QLabel("業務内容:"))
         self.summary_edit = QTextEdit()
         self.summary_edit.setMaximumHeight(80)
         summary_layout.addWidget(self.summary_edit)
-        left_form.addLayout(summary_layout)
+        overview_layout.addLayout(summary_layout)
         
+        # 詳細
         detail_layout = QVBoxLayout()
         detail_layout.addWidget(QLabel("詳細:"))
         self.detail_edit = QTextEdit()
         self.detail_edit.setMaximumHeight(100)
         detail_layout.addWidget(self.detail_edit)
-        left_form.addLayout(detail_layout)
+        overview_layout.addLayout(detail_layout)
         
-        date_layout = QHBoxLayout()
-        date_layout.addWidget(QLabel("期間:"))
-        self.project_start = QDateEdit()
-        self.project_start.setCalendarPopup(True)
-        self.project_start.setDisplayFormat("yyyy-MM-dd")
-        date_layout.addWidget(self.project_start)
+        overview_group.setLayout(overview_layout)
+        layout.addWidget(overview_group)
         
-        date_layout.addWidget(QLabel("〜"))
-        self.project_end = QDateEdit()
-        self.project_end.setCalendarPopup(True)
-        self.project_end.setSpecialValueText("継続中")
-        self.project_end.setDisplayFormat("yyyy-MM-dd")
-        date_layout.addWidget(self.project_end)
-        left_form.addLayout(date_layout)
-        
-        role_layout = QHBoxLayout()
-        role_layout.addWidget(QLabel("役割:"))
-        self.role_combo = QComboBox()
-        role_layout.addWidget(self.role_combo)
-        
-        role_layout.addWidget(QLabel("作業:"))
-        self.task_combo = QComboBox()
-        role_layout.addWidget(self.task_combo)
-        left_form.addLayout(role_layout)
-        
-        scale_layout = QHBoxLayout()
-        scale_layout.addWidget(QLabel("規模:"))
-        self.scale_edit = QLineEdit()
-        self.scale_edit.setPlaceholderText("例: 要員約12名")
-        scale_layout.addWidget(self.scale_edit)
-        left_form.addLayout(scale_layout)
-        
+        # 下部: 使用技術
         tech_group = QGroupBox("使用技術")
-        tech_layout = QVBoxLayout()
+        tech_main_layout = QVBoxLayout()
+        
+        # 技術を2行3列で配置
+        tech_grid_layout1 = QHBoxLayout()
+        tech_grid_layout2 = QHBoxLayout()
         
         tech_categories = [
             ('OS', 'os_list'),
@@ -435,22 +465,28 @@ class ProjectsView(QWidget):
             ('データベース', 'db_list')
         ]
         
-        for label, attr in tech_categories:
-            cat_layout = QVBoxLayout()
+        for i, (label, attr) in enumerate(tech_categories):
+            cat_widget = QWidget()
+            cat_layout = QVBoxLayout(cat_widget)
+            cat_layout.setContentsMargins(5, 5, 5, 5)
+            
             cat_layout.addWidget(QLabel(f"{label}:"))
             list_widget = QListWidget()
             list_widget.setSelectionMode(QAbstractItemView.MultiSelection)
-            list_widget.setMaximumHeight(80)
+            list_widget.setMaximumHeight(120)
             setattr(self, attr, list_widget)
             cat_layout.addWidget(list_widget)
-            tech_layout.addLayout(cat_layout)
+            
+            if i < 3:
+                tech_grid_layout1.addWidget(cat_widget)
+            else:
+                tech_grid_layout2.addWidget(cat_widget)
         
-        tech_group.setLayout(tech_layout)
-        right_form.addWidget(tech_group)
+        tech_main_layout.addLayout(tech_grid_layout1)
+        tech_main_layout.addLayout(tech_grid_layout2)
         
-        form_layout.addLayout(left_form, 1)
-        form_layout.addLayout(right_form, 1)
-        layout.addLayout(form_layout)
+        tech_group.setLayout(tech_main_layout)
+        layout.addWidget(tech_group)
     
     def init_engagement_tab(self):
         layout = QVBoxLayout(self.engagement_tab)
