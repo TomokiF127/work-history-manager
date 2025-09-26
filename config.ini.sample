@@ -1,0 +1,43 @@
+# 職務経歴管理ツール設定ファイル
+# このファイルを config.ini にコピーして使用してください
+
+[database]
+# データベースファイルの保存場所
+# 相対パスまたは絶対パスで指定可能
+# デフォルト: ./data/skills.db
+path = ./data/skills.db
+
+# SQLiteの設定
+# デバッグ時にSQL文を表示する場合は true
+echo = false
+
+[app]
+# アプリケーション名（ウィンドウタイトルに表示）
+name = 職務経歴管理ツール
+
+# 初回起動時に初期データを投入するか
+seed_initial_data = true
+
+[export]
+# デフォルトのエクスポート先ディレクトリ
+# 空の場合はユーザーのホームディレクトリ
+default_directory = 
+
+# CSVファイルのエンコーディング
+# utf-8-sig: Excel対応（BOM付き）
+# utf-8: 標準UTF-8
+csv_encoding = utf-8-sig
+
+[ui]
+# ウィンドウサイズ
+window_width = 1400
+window_height = 900
+
+# テーブルのカラム幅（プロジェクト一覧）
+project_name_width = 200
+role_width = 100
+period_width = 180
+scale_width = 150
+
+# 技術リストの高さ
+tech_list_height = 120

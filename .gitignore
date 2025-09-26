@@ -89,6 +89,12 @@ dmypy.json
 *.db
 *.db-shm
 *.db-wal
+data/
+
+# Config files  
+config.ini
+# Keep sample config
+!config.ini.sample
 
 # macOS
 .DS_Store
@@ -136,9 +142,4 @@ ehthumbs_vista.db
 *.lnk
 
 # Application specific
-data/
 test_db.py
-*.command
-*.bat
-build_executable.sh
-create_app_bundle.sh

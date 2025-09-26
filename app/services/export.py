@@ -22,9 +22,12 @@ class ExportService:
         try:
             stats_data = self.stats.get_all_tech_stats(kind, start_filter, end_filter)
             
+            from config import config
+            encoding = config.get_csv_encoding()
+            
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
-            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+            with open(file_path, 'w', newline='', encoding=encoding) as f:
                 writer = csv.writer(f)
                 writer.writerow(['技術名', '月数', '年月'])
                 
@@ -153,9 +156,12 @@ class ExportService:
             
             projects = repo.filter_projects(filters)
             
+            from config import config
+            encoding = config.get_csv_encoding()
+            
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
-            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+            with open(file_path, 'w', newline='', encoding=encoding) as f:
                 writer = csv.writer(f)
                 writer.writerow([
                     'プロジェクト名', '業務内容', '開始', '終了',

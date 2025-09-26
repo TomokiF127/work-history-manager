@@ -23,6 +23,37 @@ PySide6とSQLAlchemyを使用した職務経歴管理デスクトップアプリ
 - macOS / Windows / Linux
 - 画面解像度: 1400x900以上推奨
 
+## 設定ファイル
+
+### 初期設定
+
+1. `config.ini.sample` を `config.ini` にコピー:
+```bash
+cp config.ini.sample config.ini
+```
+
+2. 必要に応じて `config.ini` を編集
+
+### 設定項目
+
+| セクション | キー | 説明 | デフォルト値 |
+|-----------|------|------|------------|
+| database | path | DBファイルの場所 | ./data/skills.db |
+| database | echo | SQL文の表示 | false |
+| app | name | アプリ名 | 職務経歴管理ツール |
+| app | seed_initial_data | 初期データ投入 | true |
+| export | csv_encoding | CSV文字コード | utf-8-sig |
+| ui | window_width | ウィンドウ幅 | 1400 |
+| ui | window_height | ウィンドウ高さ | 900 |
+
+### 設定ファイルの優先順位
+
+1. `./config.ini` （カレントディレクトリ）
+2. `[プロジェクトルート]/config.ini`
+3. `~/.workhistory/config.ini` （ユーザーホーム）
+
+設定ファイルが無い場合はデフォルト値が使用されます。
+
 ## インストール
 
 ### 1. リポジトリのクローン（またはファイルを配置）

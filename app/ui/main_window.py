@@ -10,8 +10,11 @@ from ui.stats_view import StatsView
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("職務経歴管理ツール")
-        self.setGeometry(100, 100, 1400, 900)
+        from config import config
+        
+        self.setWindowTitle(config.get_app_name())
+        width, height = config.get_window_size()
+        self.setGeometry(100, 100, width, height)
         
         self.init_ui()
         self.init_menu()
