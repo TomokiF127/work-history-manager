@@ -250,8 +250,31 @@ export QT_QPA_PLATFORM=offscreen  # ヘッドレス環境の場合
 
 ## ライセンス
 
-MIT License
+**このプロジェクトはライセンスフリーです。**
+
+- 商用・非商用問わず自由にご利用いただけます
+- 改変・再配布も自由に行えます
+- クレジット表記は任意です（していただけると嬉しいです）
+
+## 貢献について
+
+### バグ報告・機能要望
+- [Issues](https://github.com/TomokiF127/work-history-manager/issues)でご報告ください
+- バグの場合は再現手順も含めてください
+
+### 変更提案
+- [Pull Request](https://github.com/TomokiF127/work-history-manager/pulls)でご提案ください
+- 大きな変更の場合は事前にIssueで相談していただけると助かります
+
+### 独自カスタマイズ
+- **大幅なカスタマイズを行う場合はフォークを推奨します**
+- フォーク後は自由に改変してお使いください
+- 有用な機能は本リポジトリへのPRも歓迎です
 
 ## 作成者
 
-© 2024 Work History Tool Development Team
+TomokiF127
+
+---
+
+**License-Free Software** - Feel free to use, modify, and distribute.
