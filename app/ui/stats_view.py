@@ -226,7 +226,7 @@ class StatsView(QWidget):
         categories = [
             ('os', 'OS'),
             ('language', '言語'),
-            ('framework', 'フレームワーク'),
+            ('framework', 'FW/ライブラリ'),
             ('tool', 'ツール'),
             ('cloud', 'クラウド'),
             ('db', 'データベース')
@@ -313,7 +313,7 @@ class StatsView(QWidget):
                 if count > 0:
                     cat_names = {
                         'os': 'OS', 'language': '言語',
-                        'framework': 'FW', 'tool': 'ツール',
+                        'framework': 'FW/ライブラリ', 'tool': 'ツール',
                         'cloud': 'クラウド', 'db': 'DB'
                     }
                     tech_summary.append(f"{cat_names[cat]}:{count}")

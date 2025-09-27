@@ -5,6 +5,7 @@ from models.relations import (
     ProjectOS, ProjectLanguage, ProjectFramework, 
     ProjectTool, ProjectCloud, ProjectDB
 )
+from models.project_roles_tasks import ProjectRole, ProjectTask
 from models.engagement import Engagement
 from models.tech_usage import TechUsage
 
@@ -13,5 +14,6 @@ __all__ = [
     'Project', 'Engagement', 'TechUsage',
     'OS', 'Language', 'Framework', 'Tool', 'Cloud', 'DB', 'Role', 'Task',
     'ProjectOS', 'ProjectLanguage', 'ProjectFramework', 
-    'ProjectTool', 'ProjectCloud', 'ProjectDB'
+    'ProjectTool', 'ProjectCloud', 'ProjectDB',
+    'ProjectRole', 'ProjectTask'
 ]

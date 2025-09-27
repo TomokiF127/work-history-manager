@@ -14,9 +14,16 @@ class Project(Base):
     role_id = Column(Integer, ForeignKey("roles.id"))
     task_id = Column(Integer, ForeignKey("tasks.id"))
     scale_text = Column(Text)
+    end_user = Column(Text)  # エンドユーザー
+    contract_company = Column(Text)  # 契約会社
+    remarks = Column(Text)  # 備考
     
     role = relationship("Role", back_populates="projects")
     task = relationship("Task", back_populates="projects")
+    
+    # 複数選択用の関連
+    project_roles = relationship("ProjectRole", back_populates="project", cascade="all, delete-orphan")
+    project_tasks = relationship("ProjectTask", back_populates="project", cascade="all, delete-orphan")
     engagements = relationship("Engagement", back_populates="project", cascade="all, delete-orphan")
     tech_usages = relationship("TechUsage", back_populates="project", cascade="all, delete-orphan")
     

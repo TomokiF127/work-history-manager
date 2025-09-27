@@ -245,7 +245,7 @@ class MastersView(QWidget):
         categories = [
             ('os', 'OS'),
             ('language', '言語'),
-            ('framework', 'フレームワーク'),
+            ('framework', 'FW/ライブラリ'),
             ('tool', 'ツール'),
             ('cloud', 'クラウド'),
             ('db', 'データベース'),

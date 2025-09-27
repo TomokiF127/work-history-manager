@@ -65,6 +65,7 @@ class Role(Base):
     
     projects = relationship("Project", back_populates="role")
     engagements = relationship("Engagement", back_populates="role_override")
+    project_roles = relationship("ProjectRole", back_populates="role")
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -75,3 +76,4 @@ class Task(Base):
     
     projects = relationship("Project", back_populates="task")
     engagements = relationship("Engagement", back_populates="task_override")
+    project_tasks = relationship("ProjectTask", back_populates="task")

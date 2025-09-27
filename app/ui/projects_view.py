@@ -17,7 +17,7 @@ class ProjectTableModel(QAbstractTableModel):
     def __init__(self, projects=None):
         super().__init__()
         self.projects = []
-        self.headers = ["プロジェクト名", "役割", "期間", "規模"]
+        self.headers = ["プロジェクト名", "役割", "期間", "規模", "エンドユーザー", "契約会社"]
         if projects:
             self.update_projects(projects)
     
@@ -50,6 +50,10 @@ class ProjectTableModel(QAbstractTableModel):
                 return ""
             elif col == 3:
                 return project['scale_text'] or ""
+            elif col == 4:
+                return project['end_user'] or ""
+            elif col == 5:
+                return project['contract_company'] or ""
         
         elif role == Qt.UserRole:
             return project['id']
@@ -72,7 +76,9 @@ class ProjectTableModel(QAbstractTableModel):
                 'role_name': project.role.name if project.role else "",
                 'project_start': project.project_start,
                 'project_end': project.project_end,
-                'scale_text': project.scale_text
+                'scale_text': project.scale_text,
+                'end_user': project.end_user,
+                'contract_company': project.contract_company
             })
         self.endResetModel()
 
@@ -354,13 +360,14 @@ class ProjectsView(QWidget):
         self.tab_widget = QTabWidget()
         right_layout.addWidget(self.tab_widget)
         
-        self.overview_tab = QWidget()
-        self.init_overview_tab()
-        self.tab_widget.addTab(self.overview_tab, "概要")
+        self.basic_info_tab = QWidget()
+        self.init_basic_info_tab()
+        self.tab_widget.addTab(self.basic_info_tab, "基本情報")
         
-        self.engagement_tab = QWidget()
-        self.init_engagement_tab()
-        self.tab_widget.addTab(self.engagement_tab, "現場")
+        self.tech_tab = QWidget()
+        self.init_tech_tab()
+        self.tab_widget.addTab(self.tech_tab, "使用技術")
+        
         
         save_layout = QHBoxLayout()
         save_layout.addStretch()
@@ -373,14 +380,18 @@ class ProjectsView(QWidget):
         self.save_button.clicked.connect(self.save_project)
         save_layout.addWidget(self.save_button)
         
+        self.sync_all_button = QPushButton("全プロジェクト技術同期")
+        self.sync_all_button.clicked.connect(self.sync_all_projects)
+        save_layout.addWidget(self.sync_all_button)
+        
         right_layout.addLayout(save_layout)
         
         splitter.addWidget(left_widget)
         splitter.addWidget(right_widget)
         splitter.setSizes([400, 800])
     
-    def init_overview_tab(self):
-        layout = QVBoxLayout(self.overview_tab)
+    def init_basic_info_tab(self):
+        layout = QVBoxLayout(self.basic_info_tab)
         
         # 上部: プロジェクト概要情報
         overview_group = QGroupBox("プロジェクト概要")
@@ -393,48 +404,79 @@ class ProjectsView(QWidget):
         name_layout.addWidget(self.name_edit)
         overview_layout.addLayout(name_layout)
         
-        # 期間・役割・作業を1行に
-        basic_info_layout = QHBoxLayout()
+        # 第1行: 期間と規模
+        first_row_layout = QHBoxLayout()
         
         # 期間
-        basic_info_layout.addWidget(QLabel("期間:"))
+        first_row_layout.addWidget(QLabel("期間:"))
         self.project_start = QDateEdit()
         self.project_start.setCalendarPopup(True)
         self.project_start.setDisplayFormat("yyyy年MM月dd日")
-        basic_info_layout.addWidget(self.project_start)
+        first_row_layout.addWidget(self.project_start)
         
-        basic_info_layout.addWidget(QLabel("〜"))
+        first_row_layout.addWidget(QLabel("〜"))
         self.project_end = QDateEdit()
         self.project_end.setCalendarPopup(True)
         self.project_end.setSpecialValueText("継続中")
         self.project_end.setDisplayFormat("yyyy年MM月dd日")
-        basic_info_layout.addWidget(self.project_end)
+        first_row_layout.addWidget(self.project_end)
         
-        basic_info_layout.addStretch()
-        
-        # 役割
-        basic_info_layout.addWidget(QLabel("役割:"))
-        self.role_combo = QComboBox()
-        basic_info_layout.addWidget(self.role_combo)
-        
-        # 作業
-        basic_info_layout.addWidget(QLabel("作業:"))
-        self.task_combo = QComboBox()
-        basic_info_layout.addWidget(self.task_combo)
+        first_row_layout.addStretch()
         
         # 規模
-        basic_info_layout.addWidget(QLabel("規模:"))
+        first_row_layout.addWidget(QLabel("規模:"))
         self.scale_edit = QLineEdit()
         self.scale_edit.setPlaceholderText("例: 要員約12名")
-        basic_info_layout.addWidget(self.scale_edit)
+        self.scale_edit.setMinimumWidth(150)
+        first_row_layout.addWidget(self.scale_edit)
         
-        overview_layout.addLayout(basic_info_layout)
+        overview_layout.addLayout(first_row_layout)
+        
+        # 第2行: 役割と作業
+        second_row_layout = QHBoxLayout()
+        
+        # 役割
+        role_layout = QVBoxLayout()
+        role_layout.addWidget(QLabel("役割:"))
+        self.role_list = QListWidget()
+        self.role_list.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.role_list.setMaximumHeight(80)
+        self.role_list.setMinimumWidth(120)
+        role_layout.addWidget(self.role_list)
+        second_row_layout.addLayout(role_layout)
+        
+        # 作業
+        task_layout = QVBoxLayout()
+        task_layout.addWidget(QLabel("作業:"))
+        self.task_list = QListWidget()
+        self.task_list.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.task_list.setMaximumHeight(80)
+        self.task_list.setMinimumWidth(120)
+        task_layout.addWidget(self.task_list)
+        second_row_layout.addLayout(task_layout)
+        
+        overview_layout.addLayout(second_row_layout)
+        
+        # 第3行: エンドユーザーと契約会社（幅広く）
+        business_layout = QHBoxLayout()
+        business_layout.addWidget(QLabel("エンドユーザー:"))
+        self.end_user_edit = QLineEdit()
+        self.end_user_edit.setMinimumWidth(200)
+        business_layout.addWidget(self.end_user_edit)
+        
+        business_layout.addWidget(QLabel("契約会社:"))
+        self.contract_company_edit = QLineEdit()
+        self.contract_company_edit.setMinimumWidth(200)
+        business_layout.addWidget(self.contract_company_edit)
+        
+        overview_layout.addLayout(business_layout)
         
         # 業務内容
         summary_layout = QVBoxLayout()
         summary_layout.addWidget(QLabel("業務内容:"))
         self.summary_edit = QTextEdit()
-        self.summary_edit.setMaximumHeight(80)
+        self.summary_edit.setMinimumHeight(80)
+        self.summary_edit.setMaximumHeight(200)
         summary_layout.addWidget(self.summary_edit)
         overview_layout.addLayout(summary_layout)
         
@@ -442,14 +484,28 @@ class ProjectsView(QWidget):
         detail_layout = QVBoxLayout()
         detail_layout.addWidget(QLabel("詳細:"))
         self.detail_edit = QTextEdit()
-        self.detail_edit.setMaximumHeight(100)
+        self.detail_edit.setMinimumHeight(100)
+        self.detail_edit.setMaximumHeight(300)
         detail_layout.addWidget(self.detail_edit)
         overview_layout.addLayout(detail_layout)
         
+        # 備考
+        remarks_layout = QVBoxLayout()
+        remarks_layout.addWidget(QLabel("備考:"))
+        self.remarks_edit = QTextEdit()
+        self.remarks_edit.setMinimumHeight(80)
+        self.remarks_edit.setMaximumHeight(200)
+        remarks_layout.addWidget(self.remarks_edit)
+        overview_layout.addLayout(remarks_layout)
+        
         overview_group.setLayout(overview_layout)
         layout.addWidget(overview_group)
+        layout.addStretch()
+    
+    def init_tech_tab(self):
+        layout = QVBoxLayout(self.tech_tab)
         
-        # 下部: 使用技術
+        # 使用技術
         tech_group = QGroupBox("使用技術")
         tech_main_layout = QVBoxLayout()
         
@@ -460,7 +516,7 @@ class ProjectsView(QWidget):
         tech_categories = [
             ('OS', 'os_list'),
             ('言語', 'language_list'),
-            ('フレームワーク', 'framework_list'),
+            ('FW/ライブラリ', 'framework_list'),
             ('ツール', 'tool_list'),
             ('クラウド', 'cloud_list'),
             ('データベース', 'db_list')
@@ -474,7 +530,7 @@ class ProjectsView(QWidget):
             cat_layout.addWidget(QLabel(f"{label}:"))
             list_widget = QListWidget()
             list_widget.setSelectionMode(QAbstractItemView.MultiSelection)
-            list_widget.setMaximumHeight(120)
+            list_widget.setMaximumHeight(150)
             setattr(self, attr, list_widget)
             cat_layout.addWidget(list_widget)
             
@@ -488,50 +544,67 @@ class ProjectsView(QWidget):
         
         tech_group.setLayout(tech_main_layout)
         layout.addWidget(tech_group)
+        layout.addStretch()
     
-    def init_engagement_tab(self):
-        layout = QVBoxLayout(self.engagement_tab)
-        
-        self.engagement_model = QStandardItemModel()
-        self.engagement_model.setHorizontalHeaderLabels([
-            "開始日", "終了日", "役割", "作業", "規模"
-        ])
-        
-        self.engagement_table = QTableView()
-        self.engagement_table.setModel(self.engagement_model)
-        layout.addWidget(self.engagement_table)
-        
-        button_layout = QHBoxLayout()
-        
-        self.add_engagement_button = QPushButton("現場追加")
-        self.add_engagement_button.clicked.connect(self.add_engagement)
-        button_layout.addWidget(self.add_engagement_button)
-        
-        self.delete_engagement_button = QPushButton("現場削除")
-        self.delete_engagement_button.clicked.connect(self.delete_engagement)
-        button_layout.addWidget(self.delete_engagement_button)
-        
-        button_layout.addStretch()
-        
-        self.auto_engagement_button = QPushButton("選択現場で技術期間を自動生成")
-        self.auto_engagement_button.clicked.connect(self.auto_generate_from_engagement)
-        button_layout.addWidget(self.auto_engagement_button)
-        
-        layout.addLayout(button_layout)
+    
+    def get_selected_role_id(self):
+        """選択された役割IDを取得（最初の選択のみ）"""
+        selected_items = self.role_list.selectedItems()
+        if selected_items:
+            return selected_items[0].data(Qt.UserRole)
+        return None
+    
+    def get_selected_task_id(self):
+        """選択された作業IDを取得（最初の選択のみ）"""
+        selected_items = self.task_list.selectedItems()
+        if selected_items:
+            return selected_items[0].data(Qt.UserRole)
+        return None
+    
+    def sync_tech_usages_with_project_selections(self, repo, project_id):
+        """プロジェクトの技術選択とtech_usagesを同期"""
+        try:
+            project = repo.get_project_by_id(project_id)
+            if not project:
+                return
+            
+            # 現在のtech_usagesを削除
+            repo.delete_tech_usages_by_project(project_id)
+            
+            # プロジェクトの技術選択から新しいtech_usagesを生成
+            tech_kinds = ['os', 'language', 'framework', 'tool', 'cloud', 'db']
+            
+            for kind in tech_kinds:
+                selected_tech_ids = repo.get_project_techs(project_id, kind)
+                
+                for tech_id in selected_tech_ids:
+                    # プロジェクト期間をデフォルトの技術使用期間として設定
+                    repo.create_tech_usage({
+                        'project_id': project_id,
+                        'kind': kind,
+                        'tech_id': tech_id,
+                        'start': project.project_start,
+                        'end': project.project_end
+                    })
+                    
+        except Exception as e:
+            print(f"技術使用期間同期エラー: {e}")
     
     def load_masters(self):
         with db_service.session_scope() as session:
             repo = Repository(session)
             
-            self.role_combo.clear()
-            self.role_combo.addItem("", None)
+            self.role_list.clear()
             for role in repo.get_master_by_kind('role'):
-                self.role_combo.addItem(role.name, role.id)
+                item = QListWidgetItem(role.name)
+                item.setData(Qt.UserRole, role.id)
+                self.role_list.addItem(item)
             
-            self.task_combo.clear()
-            self.task_combo.addItem("", None)
+            self.task_list.clear()
             for task in repo.get_master_by_kind('task'):
-                self.task_combo.addItem(task.name, task.id)
+                item = QListWidgetItem(task.name)
+                item.setData(Qt.UserRole, task.id)
+                self.task_list.addItem(item)
             
             tech_lists = [
                 ('os', self.os_list),
@@ -629,13 +702,26 @@ class ProjectsView(QWidget):
                 else:
                     self.project_end.setDate(self.project_end.minimumDate())
                 
-                index = self.role_combo.findData(project.role_id)
-                self.role_combo.setCurrentIndex(index if index >= 0 else 0)
+                # 役割の選択を復元
+                self.role_list.clearSelection()
+                for i in range(self.role_list.count()):
+                    item = self.role_list.item(i)
+                    if item.data(Qt.UserRole) == project.role_id:
+                        item.setSelected(True)
+                        break
                 
-                index = self.task_combo.findData(project.task_id)
-                self.task_combo.setCurrentIndex(index if index >= 0 else 0)
+                # 作業の選択を復元
+                self.task_list.clearSelection()
+                for i in range(self.task_list.count()):
+                    item = self.task_list.item(i)
+                    if item.data(Qt.UserRole) == project.task_id:
+                        item.setSelected(True)
+                        break
                 
                 self.scale_edit.setText(project.scale_text or "")
+                self.end_user_edit.setText(project.end_user or "")
+                self.contract_company_edit.setText(project.contract_company or "")
+                self.remarks_edit.setText(project.remarks or "")
                 
                 tech_lists = [
                     ('os', self.os_list),
@@ -655,38 +741,6 @@ class ProjectsView(QWidget):
                         if item.data(Qt.UserRole) in selected_ids:
                             item.setSelected(True)
                 
-                self.load_engagements(project_id)
-    
-    def load_engagements(self, project_id):
-        self.engagement_model.setRowCount(0)
-        
-        with db_service.session_scope() as session:
-            repo = Repository(session)
-            engagements = repo.get_engagements_by_project(project_id)
-            
-            for eng in engagements:
-                start_item = QStandardItem(eng.site_start or "")
-                start_item.setData(eng.id, Qt.UserRole)
-                
-                end_item = QStandardItem(eng.site_end or "")
-                
-                role_name = ""
-                if eng.role_override:
-                    role_name = eng.role_override.name
-                role_item = QStandardItem(role_name)
-                role_item.setData(eng.role_override_id, Qt.UserRole)
-                
-                task_name = ""
-                if eng.task_override:
-                    task_name = eng.task_override.name
-                task_item = QStandardItem(task_name)
-                task_item.setData(eng.task_override_id, Qt.UserRole)
-                
-                scale_item = QStandardItem(eng.scale_override_text or "")
-                
-                self.engagement_model.appendRow([
-                    start_item, end_item, role_item, task_item, scale_item
-                ])
     
     def new_project(self):
         self.current_project_id = None
@@ -695,15 +749,16 @@ class ProjectsView(QWidget):
         self.detail_edit.clear()
         self.project_start.setDate(QDate.currentDate())
         self.project_end.setDate(self.project_end.minimumDate())
-        self.role_combo.setCurrentIndex(0)
-        self.task_combo.setCurrentIndex(0)
+        self.role_list.clearSelection()
+        self.task_list.clearSelection()
         self.scale_edit.clear()
+        self.end_user_edit.clear()
+        self.contract_company_edit.clear()
+        self.remarks_edit.clear()
         
         for list_widget in [self.os_list, self.language_list, self.framework_list,
                            self.tool_list, self.cloud_list, self.db_list]:
             list_widget.clearSelection()
-        
-        self.engagement_model.setRowCount(0)
     
     def save_project(self):
         try:
@@ -714,9 +769,12 @@ class ProjectsView(QWidget):
                 'detail': self.detail_edit.toPlainText(),
                 'project_start': self.project_start.date().toString("yyyy-MM-dd") if self.project_start.date() != self.project_start.minimumDate() else None,
                 'project_end': self.project_end.date().toString("yyyy-MM-dd") if self.project_end.date() != self.project_end.minimumDate() else None,
-                'role_id': self.role_combo.currentData(),
-                'task_id': self.task_combo.currentData(),
-                'scale_text': self.scale_edit.text()
+                'role_id': self.get_selected_role_id(),
+                'task_id': self.get_selected_task_id(),
+                'scale_text': self.scale_edit.text(),
+                'end_user': self.end_user_edit.text(),
+                'contract_company': self.contract_company_edit.text(),
+                'remarks': self.remarks_edit.toPlainText()
             }
             
             with db_service.session_scope() as session:
@@ -746,39 +804,9 @@ class ProjectsView(QWidget):
                             selected_ids.append(item.data(Qt.UserRole))
                     repo.link_project_tech(self.current_project_id, kind, selected_ids)
                 
-                # 新規プロジェクトまたは技術使用期間がなければ自動生成
-                if is_new_project:
-                    # 新規プロジェクトは必ず自動生成
-                    repo.auto_generate_tech_usages_from_project(self.current_project_id)
-                else:
-                    # 既存プロジェクトで技術使用期間がなければ自動生成
-                    tech_usages = repo.get_tech_usages_by_project(self.current_project_id)
-                    if not tech_usages:
-                        # 紐付いている技術があるか確認
-                        has_techs = False
-                        for kind in ['os', 'language', 'framework', 'tool', 'cloud', 'db']:
-                            if repo.get_project_techs(self.current_project_id, kind):
-                                has_techs = True
-                                break
-                        
-                        if has_techs:
-                            repo.auto_generate_tech_usages_from_project(self.current_project_id)
+                # プロジェクト保存時に技術使用期間を同期
+                self.sync_tech_usages_with_project_selections(repo, self.current_project_id)
                 
-                for row in range(self.engagement_model.rowCount()):
-                    eng_id = self.engagement_model.item(row, 0).data(Qt.UserRole)
-                    eng_data = {
-                        'project_id': self.current_project_id,
-                        'site_start': self.engagement_model.item(row, 0).text(),
-                        'site_end': self.engagement_model.item(row, 1).text() or None,
-                        'role_override_id': self.engagement_model.item(row, 2).data(Qt.UserRole),
-                        'task_override_id': self.engagement_model.item(row, 3).data(Qt.UserRole),
-                        'scale_override_text': self.engagement_model.item(row, 4).text() or None
-                    }
-                    
-                    if eng_id and eng_id > 0:
-                        repo.update_engagement(eng_id, eng_data)
-                    else:
-                        repo.create_engagement(eng_data)
             
             self.refresh_data()
             self.data_changed.emit()
@@ -829,7 +857,10 @@ class ProjectsView(QWidget):
                     'project_end': original.project_end,
                     'role_id': original.role_id,
                     'task_id': original.task_id,
-                    'scale_text': original.scale_text
+                    'scale_text': original.scale_text,
+                    'end_user': original.end_user,
+                    'contract_company': original.contract_company,
+                    'remarks': original.remarks
                 }
                 
                 new_project = repo.create_project(data)
@@ -842,27 +873,6 @@ class ProjectsView(QWidget):
         self.data_changed.emit()
         QMessageBox.information(self, "成功", "プロジェクトを複製しました")
     
-    def add_engagement(self):
-        new_row = []
-        new_row.append(QStandardItem(QDate.currentDate().toString("yyyy-MM-dd")))
-        new_row[0].setData(0, Qt.UserRole)
-        new_row.append(QStandardItem(""))
-        new_row.append(QStandardItem(""))
-        new_row.append(QStandardItem(""))
-        new_row.append(QStandardItem(""))
-        
-        self.engagement_model.appendRow(new_row)
-    
-    def delete_engagement(self):
-        current = self.engagement_table.currentIndex()
-        if current.isValid():
-            eng_id = self.engagement_model.item(current.row(), 0).data(Qt.UserRole)
-            if eng_id and eng_id > 0:
-                with db_service.session_scope() as session:
-                    repo = Repository(session)
-                    repo.delete_engagement(eng_id)
-            
-            self.engagement_model.removeRow(current.row())
     
     def edit_tech_usage(self):
         if not self.current_project_id:
@@ -873,23 +883,32 @@ class ProjectsView(QWidget):
         if dialog.exec_() == QDialog.Accepted:
             self.data_changed.emit()
     
-    def auto_generate_from_engagement(self):
-        current = self.engagement_table.currentIndex()
-        if not current.isValid():
-            QMessageBox.warning(self, "警告", "現場を選択してください")
-            return
+    def sync_all_projects(self):
+        """全プロジェクトの技術選択とtech_usagesを同期"""
+        reply = QMessageBox.question(
+            self, "確認",
+            "全プロジェクトの技術使用期間を選択されている技術と同期しますか？\n"
+            "既存の技術使用期間データは上書きされます。",
+            QMessageBox.Yes | QMessageBox.No
+        )
         
-        if not self.current_project_id:
-            QMessageBox.warning(self, "警告", "プロジェクトを保存してから実行してください")
-            return
-        
-        eng_id = self.engagement_model.item(current.row(), 0).data(Qt.UserRole)
-        if not eng_id or eng_id <= 0:
-            QMessageBox.warning(self, "警告", "現場を保存してから実行してください")
-            return
-        
-        with db_service.session_scope() as session:
-            repo = Repository(session)
-            repo.auto_generate_tech_usages_from_engagement(self.current_project_id, eng_id)
-        
-        QMessageBox.information(self, "完了", "選択した現場期間で技術使用期間を生成しました")
+        if reply == QMessageBox.Yes:
+            try:
+                with db_service.session_scope() as session:
+                    repo = Repository(session)
+                    projects = repo.get_all_projects()
+                    
+                    synced_count = 0
+                    for project in projects:
+                        self.sync_tech_usages_with_project_selections(repo, project.id)
+                        synced_count += 1
+                    
+                    self.refresh_data()
+                    self.data_changed.emit()
+                    QMessageBox.information(
+                        self, "成功", 
+                        f"{synced_count}件のプロジェクトで技術使用期間を同期しました"
+                    )
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"同期に失敗しました: {str(e)}")
+    

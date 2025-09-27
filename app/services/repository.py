@@ -303,3 +303,17 @@ class Repository:
                         query = query.filter(Project.id.in_(subq))
         
         return query.order_by(Project.project_start.desc()).all()
+    
+    def delete_tech_usages_by_project(self, project_id: int):
+        """指定プロジェクトの技術使用期間をすべて削除"""
+        self.session.query(TechUsage).filter(
+            TechUsage.project_id == project_id
+        ).delete()
+        self.session.commit()
+    
+    def create_tech_usage(self, data: dict):
+        """技術使用期間を作成"""
+        tech_usage = TechUsage(**data)
+        self.session.add(tech_usage)
+        self.session.commit()
+        return tech_usage
