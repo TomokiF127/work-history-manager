@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from datetime import date
 from models import (
-    Project, Engagement, TechUsage,
+    Project, Engagement, TechUsage, SelfPR,
     OS, Language, Framework, Tool, Cloud, DB, Role, Task,
     ProjectOS, ProjectLanguage, ProjectFramework,
     ProjectTool, ProjectCloud, ProjectDB
@@ -317,3 +317,45 @@ class Repository:
         self.session.add(tech_usage)
         self.session.commit()
         return tech_usage
+    
+    # 自己PR管理
+    def get_all_self_prs(self) -> List[SelfPR]:
+        """全ての自己PRを取得（順序順）"""
+        return self.session.query(SelfPR).filter_by(is_active=True).order_by(SelfPR.order_index).all()
+    
+    def get_self_pr_by_id(self, pr_id: int) -> Optional[SelfPR]:
+        """IDで自己PRを取得"""
+        return self.session.query(SelfPR).filter_by(id=pr_id).first()
+    
+    def create_self_pr(self, data: Dict[str, Any]) -> SelfPR:
+        """自己PRを作成"""
+        pr = SelfPR(**data)
+        self.session.add(pr)
+        self.session.flush()
+        return pr
+    
+    def update_self_pr(self, pr_id: int, data: Dict[str, Any]) -> Optional[SelfPR]:
+        """自己PRを更新"""
+        pr = self.get_self_pr_by_id(pr_id)
+        if pr:
+            for key, value in data.items():
+                setattr(pr, key, value)
+            self.session.flush()
+        return pr
+    
+    def delete_self_pr(self, pr_id: int) -> bool:
+        """自己PRを削除"""
+        pr = self.get_self_pr_by_id(pr_id)
+        if pr:
+            self.session.delete(pr)
+            self.session.flush()
+            return True
+        return False
+    
+    def reorder_self_prs(self, pr_orders: List[Dict[str, int]]):
+        """自己PRの順序を変更"""
+        for item in pr_orders:
+            pr = self.get_self_pr_by_id(item['id'])
+            if pr:
+                pr.order_index = item['order']
+        self.session.flush()

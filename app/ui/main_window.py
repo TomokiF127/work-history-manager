@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, Signal
 from ui.projects_view import ProjectsView
 from ui.masters_view import MastersView
 from ui.stats_view import StatsView
+from ui.self_pr_view import SelfPRView
 from services.skill_sheet_export import SkillSheetExportService
 from services.db import db_service
 
@@ -41,8 +42,12 @@ class MainWindow(QMainWindow):
         self.stats_view = StatsView()
         self.tab_widget.addTab(self.stats_view, "経験年数統計")
         
+        self.self_pr_view = SelfPRView()
+        self.tab_widget.addTab(self.self_pr_view, "自己PR管理")
+        
         self.projects_view.data_changed.connect(self.on_data_changed)
         self.masters_view.data_changed.connect(self.on_data_changed)
+        self.self_pr_view.data_changed.connect(self.on_data_changed)
     
     def init_menu(self):
         menubar = self.menuBar()

@@ -8,10 +8,11 @@ from models.relations import (
 from models.project_roles_tasks import ProjectRole, ProjectTask
 from models.engagement import Engagement
 from models.tech_usage import TechUsage
+from models.self_pr import SelfPR
 
 __all__ = [
     'Base', 'init_db', 'get_session',
-    'Project', 'Engagement', 'TechUsage',
+    'Project', 'Engagement', 'TechUsage', 'SelfPR',
     'OS', 'Language', 'Framework', 'Tool', 'Cloud', 'DB', 'Role', 'Task',
     'ProjectOS', 'ProjectLanguage', 'ProjectFramework', 
     'ProjectTool', 'ProjectCloud', 'ProjectDB',

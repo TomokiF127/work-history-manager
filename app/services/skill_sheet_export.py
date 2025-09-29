@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from services.repository import Repository
 from services.stats import StatsService
-from models import Project, TechUsage
+from models import Project, TechUsage, SelfPR
 
 
 class SkillSheetExportService:
@@ -67,7 +67,7 @@ class SkillSheetExportService:
             
             # フォント設定
             for run in paragraph.runs:
-                run.font.name = 'MS PGothic'
+                run.font.name = 'MS ゴシック'
                 run.font.size = Pt(9)
     
     def _format_header_cell(self, cell, text):
@@ -82,7 +82,7 @@ class SkillSheetExportService:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in paragraph.runs:
                 run.font.bold = True
-                run.font.name = 'MS PGothic'
+                run.font.name = 'MS ゴシック'
                 run.font.size = Pt(9)
     
     def generate_skill_sheet_data(self, name: str = "氏名") -> Dict[str, Any]:
@@ -103,7 +103,7 @@ class SkillSheetExportService:
             "projects": self._generate_projects_data(),
             "technical_skills": self._generate_technical_skills_data(),
             "qualifications": [],  # TODO: 資格管理機能が必要
-            "self_pr": ""  # TODO: 自己PR管理機能が必要
+            "self_pr": self._generate_self_pr_data()
         }
         
         return data
@@ -213,6 +213,18 @@ class SkillSheetExportService:
         
         return skills_data
     
+    def _generate_self_pr_data(self) -> List[Dict[str, str]]:
+        """自己PRデータを生成"""
+        prs = self.repo.get_all_self_prs()
+        
+        return [
+            {
+                "title": pr.title,
+                "content": pr.content
+            }
+            for pr in prs
+        ]
+    
     def _format_period(self, start_date: Optional[str], end_date: Optional[str]) -> str:
         """期間をフォーマット"""
         if not start_date:
@@ -303,37 +315,47 @@ class SkillSheetExportService:
         data = self.generate_skill_sheet_data(name)
         doc = Document()
         
+        # ページ設定とマージン
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Cm(2.54)  # 2.54cm
+            section.bottom_margin = Cm(2.54)
+            section.left_margin = Cm(2.54)
+            section.right_margin = Cm(2.54)
+            section.page_height = Cm(29.7)  # A4
+            section.page_width = Cm(21.0)
+        
         # ドキュメント全体のフォント設定
         style = doc.styles['Normal']
         font = style.font
-        font.name = 'MS PGothic'
-        font.size = Pt(10)
+        font.name = 'MS ゴシック'  # より標準的なフォント
+        font.size = Pt(10.5)
         
         # ヘッダー
         title = doc.add_heading(data["header"]["title"], level=0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         title_run = title.runs[0]
-        title_run.font.name = 'MS PGothic'
-        title_run.font.size = Pt(16)
+        title_run.font.name = 'MS ゴシック'
+        title_run.font.size = Pt(18)
         title_run.font.bold = True
         
         # 日付と氏名を右寄せ
         date_para = doc.add_paragraph()
         date_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         date_run = date_para.add_run(data["header"]["date"])
-        date_run.font.name = 'MS PGothic'
-        date_run.font.size = Pt(10)
+        date_run.font.name = 'MS ゴシック'
+        date_run.font.size = Pt(10.5)
         
         name_para = doc.add_paragraph()
         name_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         name_run = name_para.add_run(f"氏名：{data['header']['name']}")
-        name_run.font.name = 'MS PGothic'
-        name_run.font.size = Pt(10)
+        name_run.font.name = 'MS ゴシック'
+        name_run.font.size = Pt(10.5)
         
         # 開発経歴セクション
         history_para = doc.add_paragraph()
         history_run = history_para.add_run(f"開発経歴（{self._get_career_period()}）")
-        history_run.font.name = 'MS PGothic'
+        history_run.font.name = 'MS ゴシック'
         history_run.font.size = Pt(12)
         history_run.font.bold = True
         
@@ -416,7 +438,7 @@ class SkillSheetExportService:
         doc.add_page_break()
         skill_heading = doc.add_paragraph()
         skill_run = skill_heading.add_run("■　テクニカルスキル")
-        skill_run.font.name = 'MS PGothic'
+        skill_run.font.name = 'MS ゴシック'
         skill_run.font.size = Pt(12)
         skill_run.font.bold = True
         
@@ -459,6 +481,36 @@ class SkillSheetExportService:
                     row_cells[1].text = tech_names
                     row_cells[2].text = tech_experiences
                     row_cells[3].text = ""  # 補足は空欄（将来的に追加可能）
+        
+        # 自己PR
+        if data["self_pr"]:
+            doc.add_page_break()
+            pr_heading = doc.add_paragraph()
+            pr_run = pr_heading.add_run("■　自己PR")
+            pr_run.font.name = 'MS ゴシック'
+            pr_run.font.size = Pt(12)
+            pr_run.font.bold = True
+            
+            for i, pr in enumerate(data["self_pr"]):
+                if i > 0:
+                    doc.add_paragraph()  # PR項目間にスペース
+                
+                # サブタイトル
+                subtitle_para = doc.add_paragraph()
+                subtitle_run = subtitle_para.add_run(f"◆{pr['title']}")
+                subtitle_run.font.name = 'MS ゴシック'
+                subtitle_run.font.size = Pt(11)
+                subtitle_run.font.bold = True
+                
+                # 内容
+                content_para = doc.add_paragraph()
+                content_run = content_para.add_run(pr['content'])
+                content_run.font.name = 'MS ゴシック'
+                content_run.font.size = Pt(10.5)
+                
+                # 行間設定
+                content_para.paragraph_format.line_spacing = 1.2
+                content_para.paragraph_format.space_after = Pt(6)
         
         # 保存
         doc.save(filepath)
@@ -532,6 +584,17 @@ class SkillSheetExportService:
                 content.append("|------|----------|")
                 for skill in skills:
                     content.append(f"| {skill['name']} | {skill['experience']} |")
+                content.append("")
+        
+        # 自己PR
+        if data["self_pr"]:
+            content.append("## 自己PR")
+            content.append("")
+            
+            for pr in data["self_pr"]:
+                content.append(f"### ◆{pr['title']}")
+                content.append("")
+                content.append(pr['content'])
                 content.append("")
         
         # ファイルに書き込み
