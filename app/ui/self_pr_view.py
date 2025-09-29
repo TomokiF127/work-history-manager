@@ -109,60 +109,99 @@ class SelfPRView(QWidget):
         self.pr_list = QListWidget()
         self.pr_list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.pr_list.itemSelectionChanged.connect(self.on_pr_selected)
+        self.pr_list.itemDoubleClicked.connect(self.edit_pr)  # ダブルクリックで編集
         list_layout.addWidget(self.pr_list)
         
         left_layout.addWidget(list_group)
         
-        # ボタン
-        button_layout = QHBoxLayout()
+        # ボタンをグループ化
+        button_group = QGroupBox("操作")
+        button_group_layout = QVBoxLayout(button_group)
         
-        self.new_button = QPushButton("新規")
+        # 追加・編集・削除ボタン
+        crud_layout = QHBoxLayout()
+        
+        self.new_button = QPushButton("新規追加")
+        self.new_button.setToolTip("新しい自己PR項目を追加します")
         self.new_button.clicked.connect(self.new_pr)
-        button_layout.addWidget(self.new_button)
+        crud_layout.addWidget(self.new_button)
         
         self.edit_button = QPushButton("編集")
+        self.edit_button.setToolTip("選択した項目を編集します（ダブルクリックでも可）")
         self.edit_button.clicked.connect(self.edit_pr)
         self.edit_button.setEnabled(False)
-        button_layout.addWidget(self.edit_button)
+        crud_layout.addWidget(self.edit_button)
         
         self.delete_button = QPushButton("削除")
+        self.delete_button.setToolTip("選択した項目を削除します")
         self.delete_button.clicked.connect(self.delete_pr)
         self.delete_button.setEnabled(False)
-        button_layout.addWidget(self.delete_button)
+        crud_layout.addWidget(self.delete_button)
         
-        self.up_button = QPushButton("↑")
+        button_group_layout.addLayout(crud_layout)
+        
+        # 順序変更ボタン
+        order_layout = QHBoxLayout()
+        order_layout.addWidget(QLabel("表示順序:"))
+        
+        self.up_button = QPushButton("上に移動 ↑")
+        self.up_button.setToolTip("選択した項目を上に移動します")
         self.up_button.clicked.connect(self.move_up)
         self.up_button.setEnabled(False)
-        button_layout.addWidget(self.up_button)
+        order_layout.addWidget(self.up_button)
         
-        self.down_button = QPushButton("↓")
+        self.down_button = QPushButton("下に移動 ↓")
+        self.down_button.setToolTip("選択した項目を下に移動します")
         self.down_button.clicked.connect(self.move_down)
         self.down_button.setEnabled(False)
-        button_layout.addWidget(self.down_button)
+        order_layout.addWidget(self.down_button)
         
-        button_layout.addStretch()
-        left_layout.addLayout(button_layout)
+        button_group_layout.addLayout(order_layout)
+        left_layout.addWidget(button_group)
         
         # 右側: プレビュー
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         
-        preview_group = QGroupBox("プレビュー")
+        preview_group = QGroupBox("プレビュー（スキルシート出力イメージ）")
         preview_layout = QVBoxLayout(preview_group)
         
-        self.title_label = QLabel("タイトルなし")
-        self.title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        preview_layout.addWidget(self.title_label)
+        # タイトル表示
+        title_container = QHBoxLayout()
+        title_container.addWidget(QLabel("◆"))
+        self.title_label = QLabel("項目を選択してください")
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
+        title_container.addWidget(self.title_label)
+        title_container.addStretch()
+        preview_layout.addLayout(title_container)
         
+        # 内容表示
         self.content_display = QTextEdit()
         self.content_display.setReadOnly(True)
+        self.content_display.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                padding: 8px;
+                background-color: #fafafa;
+                font-family: 'MS ゴシック', 'MS Gothic', monospace;
+                font-size: 10pt;
+                line-height: 1.4;
+            }
+        """)
+        self.content_display.setPlaceholderText("選択した自己PR項目の内容がここに表示されます。\n\nスキルシート出力時のイメージを確認できます。")
         preview_layout.addWidget(self.content_display)
+        
+        # ヒント表示
+        hint_label = QLabel("💡 ヒント: 項目をダブルクリックすると編集できます")
+        hint_label.setStyleSheet("color: #666; font-size: 9pt; font-style: italic;")
+        preview_layout.addWidget(hint_label)
         
         right_layout.addWidget(preview_group)
         
         splitter.addWidget(left_widget)
         splitter.addWidget(right_widget)
-        splitter.setSizes([300, 500])
+        splitter.setSizes([350, 550])
     
     def load_data(self):
         """データを読み込み"""
@@ -203,7 +242,7 @@ class SelfPRView(QWidget):
             self.up_button.setEnabled(False)
             self.down_button.setEnabled(False)
             
-            self.title_label.setText("タイトルなし")
+            self.title_label.setText("項目を選択してください")
             self.content_display.clear()
     
     def new_pr(self):

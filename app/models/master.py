@@ -62,6 +62,7 @@ class Role(Base):
     id = Column(Integer, primary_key=True)
     name = Column(Text, unique=True, nullable=False)
     note = Column(Text)
+    order_index = Column(Integer, default=0)  # 上位順序
     
     projects = relationship("Project", back_populates="role")
     engagements = relationship("Engagement", back_populates="role_override")
@@ -73,6 +74,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True)
     name = Column(Text, unique=True, nullable=False)
     note = Column(Text)
+    order_index = Column(Integer, default=0)  # 上流順序（工程順）
     
     projects = relationship("Project", back_populates="task")
     engagements = relationship("Engagement", back_populates="task_override")

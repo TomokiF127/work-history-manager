@@ -54,7 +54,11 @@ class Repository:
         }
         model = master_map.get(kind)
         if model:
-            return self.session.query(model).order_by(model.name).all()
+            # 役割と作業は順序で並び替え、その他は名前で並び替え
+            if kind in ['role', 'task']:
+                return self.session.query(model).order_by(model.order_index, model.name).all()
+            else:
+                return self.session.query(model).order_by(model.name).all()
         return []
     
     def create_master(self, kind: str, name: str, note: str = None) -> Optional[Any]:

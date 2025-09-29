@@ -148,8 +148,8 @@ class SkillSheetExportService:
                     "business_content": project.work_summary,
                     "project_detail": project.detail,
                     "environment": self._get_project_environment(project.id),
-                    "role": project.role.name if project.role else "",
-                    "task": project.task.name if project.task else "",
+                    "role": self._get_project_roles_sorted(project.id),
+                    "task": self._get_project_tasks_sorted(project.id),
                     "team_size": project.scale_text or "",
                     "contract_company": company,
                     "end_user": project.end_user or ""
@@ -185,6 +185,38 @@ class SkillSheetExportService:
                         environment[kind].append(tech.name)
         
         return environment
+    
+    def _get_project_roles_sorted(self, project_id: int) -> str:
+        """プロジェクトの役割を順序で取得"""
+        from models import ProjectRole, Role
+        
+        # プロジェクトに関連する役割を順序で取得
+        roles = self.session.query(Role).join(ProjectRole).filter(
+            ProjectRole.project_id == project_id
+        ).order_by(Role.order_index, Role.name).all()
+        
+        # 単一プロジェクトの場合は従来通り
+        project = self.repo.get_project_by_id(project_id)
+        if project and project.role and not roles:
+            return project.role.name
+        
+        return ", ".join([role.name for role in roles]) if roles else ""
+    
+    def _get_project_tasks_sorted(self, project_id: int) -> str:
+        """プロジェクトの作業を順序で取得"""
+        from models import ProjectTask, Task
+        
+        # プロジェクトに関連する作業を順序で取得
+        tasks = self.session.query(Task).join(ProjectTask).filter(
+            ProjectTask.project_id == project_id
+        ).order_by(Task.order_index, Task.name).all()
+        
+        # 単一プロジェクトの場合は従来通り
+        project = self.repo.get_project_by_id(project_id)
+        if project and project.task and not tasks:
+            return project.task.name
+        
+        return ", ".join([task.name for task in tasks]) if tasks else ""
     
     def _generate_technical_skills_data(self) -> Dict[str, List[Dict[str, Any]]]:
         """技術スキルデータを生成"""
