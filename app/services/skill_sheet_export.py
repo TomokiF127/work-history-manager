@@ -9,8 +9,12 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from collections import defaultdict
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, Inches, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.oxml.shared import OxmlElement, qn
+from docx.oxml.ns import nsdecls
+from docx.oxml import parse_xml
 from sqlalchemy.orm import Session
 
 from services.repository import Repository
@@ -25,6 +29,61 @@ class SkillSheetExportService:
         self.session = session
         self.repo = Repository(session)
         self.stats_service = StatsService(session)
+    
+    def _set_table_borders(self, table):
+        """テーブルに罫線を設定"""
+        tbl = table._tbl
+        tbl_borders = OxmlElement('w:tblBorders')
+        
+        # 罫線の種類と太さを設定
+        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            border = OxmlElement(f'w:{border_name}')
+            border.set(qn('w:val'), 'single')
+            border.set(qn('w:sz'), '4')  # 0.5pt
+            border.set(qn('w:space'), '0')
+            border.set(qn('w:color'), '000000')
+            tbl_borders.append(border)
+        
+        tbl_pr = tbl.find(qn('w:tblPr'))
+        if tbl_pr is None:
+            tbl_pr = OxmlElement('w:tblPr')
+            tbl.insert(0, tbl_pr)
+        tbl_pr.append(tbl_borders)
+    
+    def _set_cell_properties(self, cell, width_cm=None, vertical_align='top'):
+        """セルのプロパティを設定"""
+        # セル幅設定
+        if width_cm:
+            cell.width = Cm(width_cm)
+        
+        # 垂直方向の配置
+        cell.vertical_alignment = getattr(WD_ALIGN_VERTICAL, vertical_align.upper())
+        
+        # セル内のパラグラフの書式設定
+        for paragraph in cell.paragraphs:
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
+            paragraph.paragraph_format.line_spacing = 1.0
+            
+            # フォント設定
+            for run in paragraph.runs:
+                run.font.name = 'MS PGothic'
+                run.font.size = Pt(9)
+    
+    def _format_header_cell(self, cell, text):
+        """ヘッダーセルの書式設定"""
+        cell.text = text
+        # 背景色を薄いグレーに設定
+        shading_elm = parse_xml(r'<w:shd {} w:fill="F2F2F2"/>'.format(nsdecls('w')))
+        cell._tc.get_or_add_tcPr().append(shading_elm)
+        
+        # フォント設定
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in paragraph.runs:
+                run.font.bold = True
+                run.font.name = 'MS PGothic'
+                run.font.size = Pt(9)
     
     def generate_skill_sheet_data(self, name: str = "氏名") -> Dict[str, Any]:
         """スキルシートデータを生成
@@ -214,6 +273,26 @@ class SkillSheetExportService:
         except:
             return ""
     
+    def _get_career_period(self) -> str:
+        """開発経歴期間を取得"""
+        projects = self.repo.get_all_projects()
+        if not projects:
+            return "期間未設定"
+        
+        # 最も古い開始日と最新の終了日を取得
+        start_dates = [p.project_start for p in projects if p.project_start]
+        
+        if not start_dates:
+            return "期間未設定"
+        
+        earliest_start = min(start_dates)
+        
+        try:
+            start_date = datetime.strptime(earliest_start, "%Y-%m-%d")
+            return f"{start_date.year}年{start_date.month:02d}月～現在"
+        except:
+            return "期間未設定"
+    
     def export_to_docx(self, filepath: str, name: str = "氏名"):
         """DOCXファイルとしてエクスポート
         
@@ -224,38 +303,78 @@ class SkillSheetExportService:
         data = self.generate_skill_sheet_data(name)
         doc = Document()
         
+        # ドキュメント全体のフォント設定
+        style = doc.styles['Normal']
+        font = style.font
+        font.name = 'MS PGothic'
+        font.size = Pt(10)
+        
         # ヘッダー
         title = doc.add_heading(data["header"]["title"], level=0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_run = title.runs[0]
+        title_run.font.name = 'MS PGothic'
+        title_run.font.size = Pt(16)
+        title_run.font.bold = True
         
-        # 日付と氏名
-        doc.add_paragraph(data["header"]["date"])
-        doc.add_paragraph(f"氏名：{data['header']['name']}")
+        # 日付と氏名を右寄せ
+        date_para = doc.add_paragraph()
+        date_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        date_run = date_para.add_run(data["header"]["date"])
+        date_run.font.name = 'MS PGothic'
+        date_run.font.size = Pt(10)
         
-        # 開発経歴
-        doc.add_heading("開発経歴", level=1)
+        name_para = doc.add_paragraph()
+        name_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        name_run = name_para.add_run(f"氏名：{data['header']['name']}")
+        name_run.font.name = 'MS PGothic'
+        name_run.font.size = Pt(10)
+        
+        # 開発経歴セクション
+        history_para = doc.add_paragraph()
+        history_run = history_para.add_run(f"開発経歴（{self._get_career_period()}）")
+        history_run.font.name = 'MS PGothic'
+        history_run.font.size = Pt(12)
+        history_run.font.bold = True
         
         # プロジェクトテーブル
         if data["projects"]:
             table = doc.add_table(rows=1, cols=5)
-            table.style = 'Table Grid'
+            self._set_table_borders(table)
             
-            # ヘッダー行
+            # テーブル幅の設定
+            table.autofit = False
+            table.allow_autofit = False
+            
+            # ヘッダー行の設定
             header_cells = table.rows[0].cells
-            header_cells[0].text = "現場参画\n期間"
-            header_cells[1].text = "プロジェクト\n期間"
-            header_cells[2].text = "プロジェクト名および業務内容"
-            header_cells[3].text = "開発環境"
-            header_cells[4].text = "役割／担当／規模"
+            self._format_header_cell(header_cells[0], "現場参画\n期間")
+            self._format_header_cell(header_cells[1], "プロジェクト\n期間")
+            self._format_header_cell(header_cells[2], "プロジェクト名および業務内容")
+            self._format_header_cell(header_cells[3], "開発環境")
+            self._format_header_cell(header_cells[4], "役割／担当／規模")
+            
+            # 列幅の設定（サンプルに合わせて調整）
+            self._set_cell_properties(header_cells[0], width_cm=2.5)  # 現場参画期間
+            self._set_cell_properties(header_cells[1], width_cm=2.5)  # プロジェクト期間
+            self._set_cell_properties(header_cells[2], width_cm=8.0)  # プロジェクト名・業務内容
+            self._set_cell_properties(header_cells[3], width_cm=3.5)  # 開発環境
+            self._set_cell_properties(header_cells[4], width_cm=3.5)  # 役割・担当・規模
             
             # プロジェクトデータ
             for project in data["projects"]:
                 row_cells = table.add_row().cells
                 
+                # 各セルの書式設定
+                for i, cell in enumerate(row_cells):
+                    widths = [2.5, 2.5, 8.0, 3.5, 3.5]
+                    self._set_cell_properties(cell, width_cm=widths[i], vertical_align='top')
+                
+                # 期間セル（縦書き風に改行を入れる）
                 row_cells[0].text = project["participation_period"]
                 row_cells[1].text = project["project_period"]
                 
-                # プロジェクト詳細
+                # プロジェクト詳細（サンプルの形式に合わせる）
                 project_text = f"【プロジェクト】\n{project['project_name']}\n\n"
                 if project["business_content"]:
                     project_text += f"【業務内容】\n{project['business_content']}\n\n"
@@ -263,57 +382,83 @@ class SkillSheetExportService:
                     project_text += f"【プロジェクト詳細】\n{project['project_detail']}"
                 row_cells[2].text = project_text
                 
-                # 開発環境
-                env_text = ""
+                # 開発環境（改行で区切る）
+                env_parts = []
                 if project["environment"]["os"]:
-                    env_text += f"【OS】\n{', '.join(project['environment']['os'])}\n"
+                    env_parts.append(f"【OS】\n{chr(10).join(project['environment']['os'])}")
                 if project["environment"]["language"]:
-                    env_text += f"【言語】\n{', '.join(project['environment']['language'])}\n"
+                    env_parts.append(f"【言語】\n{chr(10).join(project['environment']['language'])}")
                 if project["environment"]["db"]:
-                    env_text += f"【DB】\n{', '.join(project['environment']['db'])}\n"
+                    env_parts.append(f"【DB】\n{chr(10).join(project['environment']['db'])}")
                 if project["environment"]["framework"]:
-                    env_text += f"【FW】\n{', '.join(project['environment']['framework'])}\n"
+                    env_parts.append(f"【FW/ライブラリ】\n{chr(10).join(project['environment']['framework'])}")
                 if project["environment"]["tool"]:
-                    env_text += f"【ツール】\n{', '.join(project['environment']['tool'][:5])}\n"  # 最初の5つのみ
+                    # ツールは多いので主要なもののみ
+                    main_tools = project['environment']['tool'][:8]
+                    env_parts.append(f"【ツール】\n{chr(10).join(main_tools)}")
                 if project["environment"]["cloud"]:
-                    env_text += f"【クラウド】\n{', '.join(project['environment']['cloud'])}\n"
-                row_cells[3].text = env_text.strip()
+                    env_parts.append(f"【クラウド】\n{chr(10).join(project['environment']['cloud'])}")
                 
-                # 役割/規模
-                role_text = ""
+                row_cells[3].text = '\n\n'.join(env_parts)
+                
+                # 役割/担当/規模（サンプルの形式に合わせる）
+                role_parts = []
                 if project["role"]:
-                    role_text += f"【役割】\n{project['role']}\n"
+                    role_parts.append(f"【役割】\n{project['role']}")
                 if project["task"]:
-                    role_text += f"【担当】\n{project['task']}\n"
+                    role_parts.append(f"【担当】\n{project['task']}")
                 if project["team_size"]:
-                    role_text += f"【規模】\n{project['team_size']}"
-                row_cells[4].text = role_text.strip()
+                    role_parts.append(f"【プロジェクト規模】\n{project['team_size']}")
+                
+                row_cells[4].text = '\n\n'.join(role_parts)
         
         # テクニカルスキル
         doc.add_page_break()
-        doc.add_heading("■　テクニカルスキル", level=1)
+        skill_heading = doc.add_paragraph()
+        skill_run = skill_heading.add_run("■　テクニカルスキル")
+        skill_run.font.name = 'MS PGothic'
+        skill_run.font.size = Pt(12)
+        skill_run.font.bold = True
         
         if data["technical_skills"]:
             skill_table = doc.add_table(rows=1, cols=4)
-            skill_table.style = 'Table Grid'
+            self._set_table_borders(skill_table)
             
-            # ヘッダー行は作らず、各カテゴリごとに行を追加
-            skill_table.rows[0].cells[0].text = "カテゴリ"
-            skill_table.rows[0].cells[1].text = "技術"
-            skill_table.rows[0].cells[2].text = "経験期間"
-            skill_table.rows[0].cells[3].text = "補足"
+            # ヘッダー行の設定
+            header_cells = skill_table.rows[0].cells
+            self._format_header_cell(header_cells[0], "カテゴリ")
+            self._format_header_cell(header_cells[1], "技術")
+            self._format_header_cell(header_cells[2], "経験期間")
+            self._format_header_cell(header_cells[3], "補足")
             
-            for category, skills in data["technical_skills"].items():
-                if skills:
-                    # 技術名と期間を結合
+            # 列幅設定
+            self._set_cell_properties(header_cells[0], width_cm=2.0)  # カテゴリ
+            self._set_cell_properties(header_cells[1], width_cm=6.0)  # 技術
+            self._set_cell_properties(header_cells[2], width_cm=4.0)  # 経験期間
+            self._set_cell_properties(header_cells[3], width_cm=8.0)  # 補足
+            
+            # カテゴリ順序をサンプルに合わせる
+            category_order = ["OS", "言語", "DB", "FW/ライブラリ", "ツール", "クラウド"]
+            
+            for category in category_order:
+                if category in data["technical_skills"] and data["technical_skills"][category]:
+                    skills = data["technical_skills"][category]
+                    
+                    # 技術名と期間を改行で区切る
                     tech_names = "\n".join([s["name"] for s in skills])
                     tech_experiences = "\n".join([s["experience"] for s in skills])
                     
                     row_cells = skill_table.add_row().cells
+                    
+                    # 各セルの書式設定
+                    for i, cell in enumerate(row_cells):
+                        widths = [2.0, 6.0, 4.0, 8.0]
+                        self._set_cell_properties(cell, width_cm=widths[i], vertical_align='top')
+                    
                     row_cells[0].text = category
                     row_cells[1].text = tech_names
                     row_cells[2].text = tech_experiences
-                    row_cells[3].text = ""  # 補足は空欄
+                    row_cells[3].text = ""  # 補足は空欄（将来的に追加可能）
         
         # 保存
         doc.save(filepath)
