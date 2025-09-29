@@ -1,11 +1,14 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QMenuBar, QMenu, QMessageBox, QStatusBar
+    QTabWidget, QMenuBar, QMenu, QMessageBox, QStatusBar,
+    QFileDialog, QInputDialog
 )
 from PySide6.QtCore import Qt, Signal
 from ui.projects_view import ProjectsView
 from ui.masters_view import MastersView
 from ui.stats_view import StatsView
+from services.skill_sheet_export import SkillSheetExportService
+from services.db import db_service
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -49,6 +52,9 @@ class MainWindow(QMainWindow):
         export_action = file_menu.addAction("統計をエクスポート(&E)")
         export_action.triggered.connect(self.stats_view.export_all)
         
+        skill_sheet_action = file_menu.addAction("スキルシートをエクスポート(&S)")
+        skill_sheet_action.triggered.connect(self.export_skill_sheet)
+        
         file_menu.addSeparator()
         
         exit_action = file_menu.addAction("終了(&X)")
@@ -73,8 +79,70 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "職務経歴管理ツールについて",
-            "職務経歴管理ツール v1.0.0\n\n"
+            "職務経歴管理ツール v1.5.0\n\n"
             "プロジェクトと技術経験を管理し、\n"
             "重複なしで経験月数を集計するツールです。\n\n"
-            "© 2024"
+            "© 2024 TomokiF127"
         )
+    
+    def export_skill_sheet(self):
+        """スキルシートをエクスポート"""
+        # 名前を入力
+        name, ok = QInputDialog.getText(
+            self, "氏名入力", 
+            "スキルシートに記載する氏名を入力してください:",
+            text="氏名"
+        )
+        
+        if not ok:
+            return
+        
+        # 出力形式を選択
+        formats = ["Word文書 (*.docx)", "Markdown (*.md)"]
+        format_choice = QMessageBox.question(
+            self, "出力形式選択",
+            "出力形式を選択してください。\n\nWord文書: スキルシートのフォーマットで出力\nMarkdown: テキスト形式で出力",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save
+        )
+        
+        if format_choice == QMessageBox.StandardButton.Cancel:
+            return
+        
+        # ファイル保存ダイアログ
+        file_filter = "Word文書 (*.docx);;Markdown (*.md)"
+        filepath, selected_filter = QFileDialog.getSaveFileName(
+            self, "スキルシートを保存", 
+            f"スキルシート_{name}.docx",
+            file_filter
+        )
+        
+        if not filepath:
+            return
+        
+        try:
+            with db_service.session_scope() as session:
+                export_service = SkillSheetExportService(session)
+                
+                if selected_filter == "Markdown (*.md)" or filepath.endswith(".md"):
+                    if not filepath.endswith(".md"):
+                        filepath += ".md"
+                    export_service.export_to_markdown(filepath, name)
+                    QMessageBox.information(
+                        self, "成功", 
+                        f"スキルシートをMarkdown形式で保存しました:\n{filepath}"
+                    )
+                else:
+                    if not filepath.endswith(".docx"):
+                        filepath += ".docx"
+                    export_service.export_to_docx(filepath, name)
+                    QMessageBox.information(
+                        self, "成功", 
+                        f"スキルシートをWord文書として保存しました:\n{filepath}"
+                    )
+                    
+        except Exception as e:
+            QMessageBox.critical(
+                self, "エラー",
+                f"スキルシートの出力中にエラーが発生しました:\n{str(e)}"
+            )
