@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
     QFormLayout, QSpinBox
 )
 from PySide6.QtCore import Qt, QDate, Signal, QAbstractTableModel, QModelIndex
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QKeySequence, QShortcut
+from ui.styles import BUTTON_STYLES
 from datetime import date, datetime
 from typing import List, Optional
 from services.db import db_service
@@ -81,6 +82,192 @@ class ProjectTableModel(QAbstractTableModel):
                 'contract_company': project.contract_company
             })
         self.endResetModel()
+
+class RoleSelectionDialog(QDialog):
+    def __init__(self, selected_role_ids, parent=None):
+        super().__init__(parent)
+        self.selected_role_ids = selected_role_ids.copy() if selected_role_ids else []
+        self.all_roles = []  # 全ての役割データを保持
+        self.setWindowTitle("役割選択")
+        self.setModal(True)
+        self.resize(400, 500)
+
+        layout = QVBoxLayout(self)
+
+        # 説明ラベル
+        info_label = QLabel("役割を複数選択できます:")
+        layout.addWidget(info_label)
+
+        # 検索ボックス
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("検索:"))
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("役割名で検索...")
+        self.search_box.textChanged.connect(self.filter_roles)
+        search_layout.addWidget(self.search_box)
+        layout.addLayout(search_layout)
+
+        # リストウィジェット
+        self.role_list = QListWidget()
+        self.role_list.setSelectionMode(QAbstractItemView.MultiSelection)
+        layout.addWidget(self.role_list)
+
+        # マスターデータを読み込み
+        self.load_roles()
+
+        # ボタン
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            Qt.Horizontal, self
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def load_roles(self):
+        with db_service.session_scope() as session:
+            repo = Repository(session)
+            roles = repo.get_master_by_kind('role')
+
+            # 全ての役割データを保持
+            self.all_roles = [(role.id, role.name) for role in roles]
+
+            # リストに表示
+            self.filter_roles()
+
+    def filter_roles(self):
+        """検索テキストに基づいて役割をフィルタリング"""
+        search_text = self.search_box.text().lower() if hasattr(self, 'search_box') else ""
+
+        # 現在の選択状態を保存
+        current_selections = {self.role_list.item(i).data(Qt.UserRole)
+                             for i in range(self.role_list.count())
+                             if self.role_list.item(i).isSelected()}
+
+        # リストをクリア
+        self.role_list.clear()
+
+        # フィルタリングして表示
+        for role_id, role_name in self.all_roles:
+            if search_text in role_name.lower():
+                item = QListWidgetItem(role_name)
+                item.setData(Qt.UserRole, role_id)
+                self.role_list.addItem(item)
+
+                # 選択状態を復元
+                if role_id in self.selected_role_ids or role_id in current_selections:
+                    item.setSelected(True)
+
+    def get_selected_ids(self):
+        """選択された役割IDのリストを返す"""
+        selected = []
+        for i in range(self.role_list.count()):
+            item = self.role_list.item(i)
+            if item.isSelected():
+                selected.append(item.data(Qt.UserRole))
+        return selected
+
+    def get_selected_names(self):
+        """選択された役割名のリストを返す"""
+        selected = []
+        for i in range(self.role_list.count()):
+            item = self.role_list.item(i)
+            if item.isSelected():
+                selected.append(item.text())
+        return selected
+
+class TaskSelectionDialog(QDialog):
+    def __init__(self, selected_task_ids, parent=None):
+        super().__init__(parent)
+        self.selected_task_ids = selected_task_ids.copy() if selected_task_ids else []
+        self.all_tasks = []  # 全ての作業データを保持
+        self.setWindowTitle("作業選択")
+        self.setModal(True)
+        self.resize(400, 500)
+
+        layout = QVBoxLayout(self)
+
+        # 説明ラベル
+        info_label = QLabel("作業を複数選択できます:")
+        layout.addWidget(info_label)
+
+        # 検索ボックス
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("検索:"))
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("作業名で検索...")
+        self.search_box.textChanged.connect(self.filter_tasks)
+        search_layout.addWidget(self.search_box)
+        layout.addLayout(search_layout)
+
+        # リストウィジェット
+        self.task_list = QListWidget()
+        self.task_list.setSelectionMode(QAbstractItemView.MultiSelection)
+        layout.addWidget(self.task_list)
+
+        # マスターデータを読み込み
+        self.load_tasks()
+
+        # ボタン
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            Qt.Horizontal, self
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def load_tasks(self):
+        with db_service.session_scope() as session:
+            repo = Repository(session)
+            tasks = repo.get_master_by_kind('task')
+
+            # 全ての作業データを保持
+            self.all_tasks = [(task.id, task.name) for task in tasks]
+
+            # リストに表示
+            self.filter_tasks()
+
+    def filter_tasks(self):
+        """検索テキストに基づいて作業をフィルタリング"""
+        search_text = self.search_box.text().lower() if hasattr(self, 'search_box') else ""
+
+        # 現在の選択状態を保存
+        current_selections = {self.task_list.item(i).data(Qt.UserRole)
+                             for i in range(self.task_list.count())
+                             if self.task_list.item(i).isSelected()}
+
+        # リストをクリア
+        self.task_list.clear()
+
+        # フィルタリングして表示
+        for task_id, task_name in self.all_tasks:
+            if search_text in task_name.lower():
+                item = QListWidgetItem(task_name)
+                item.setData(Qt.UserRole, task_id)
+                self.task_list.addItem(item)
+
+                # 選択状態を復元
+                if task_id in self.selected_task_ids or task_id in current_selections:
+                    item.setSelected(True)
+
+    def get_selected_ids(self):
+        """選択された作業IDのリストを返す"""
+        selected = []
+        for i in range(self.task_list.count()):
+            item = self.task_list.item(i)
+            if item.isSelected():
+                selected.append(item.data(Qt.UserRole))
+        return selected
+
+    def get_selected_names(self):
+        """選択された作業名のリストを返す"""
+        selected = []
+        for i in range(self.task_list.count()):
+            item = self.task_list.item(i)
+            if item.isSelected():
+                selected.append(item.text())
+        return selected
 
 class TechUsageDialog(QDialog):
     def __init__(self, project_id, parent=None):
@@ -274,6 +461,7 @@ class ProjectsView(QWidget):
         self.load_masters()
         self.set_default_filters()
         self.refresh_data()
+        self.setup_shortcuts()
     
     def init_ui(self):
         layout = QHBoxLayout(self)
@@ -340,14 +528,17 @@ class ProjectsView(QWidget):
         
         button_layout = QHBoxLayout()
         self.new_button = QPushButton("新規")
+        self.new_button.setStyleSheet(BUTTON_STYLES['success'])
         self.new_button.clicked.connect(self.new_project)
         button_layout.addWidget(self.new_button)
         
         self.duplicate_button = QPushButton("複製")
+        self.duplicate_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.duplicate_button.clicked.connect(self.duplicate_project)
         button_layout.addWidget(self.duplicate_button)
         
         self.delete_button = QPushButton("削除")
+        self.delete_button.setStyleSheet(BUTTON_STYLES['danger'])
         self.delete_button.clicked.connect(self.delete_project)
         button_layout.addWidget(self.delete_button)
         
@@ -434,27 +625,27 @@ class ProjectsView(QWidget):
         
         # 第2行: 役割と作業
         second_row_layout = QHBoxLayout()
-        
+
         # 役割
         role_layout = QVBoxLayout()
         role_layout.addWidget(QLabel("役割:"))
-        self.role_list = QListWidget()
-        self.role_list.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.role_list.setMaximumHeight(80)
-        self.role_list.setMinimumWidth(120)
-        role_layout.addWidget(self.role_list)
+        self.role_button = QPushButton("選択...")
+        self.role_button.clicked.connect(self.open_role_dialog)
+        self.role_button.setMinimumWidth(120)
+        role_layout.addWidget(self.role_button)
+        self.selected_roles = []  # 選択された役割IDリスト
         second_row_layout.addLayout(role_layout)
-        
+
         # 作業
         task_layout = QVBoxLayout()
         task_layout.addWidget(QLabel("作業:"))
-        self.task_list = QListWidget()
-        self.task_list.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.task_list.setMaximumHeight(80)
-        self.task_list.setMinimumWidth(120)
-        task_layout.addWidget(self.task_list)
+        self.task_button = QPushButton("選択...")
+        self.task_button.clicked.connect(self.open_task_dialog)
+        self.task_button.setMinimumWidth(120)
+        task_layout.addWidget(self.task_button)
+        self.selected_tasks = []  # 選択された作業IDリスト
         second_row_layout.addLayout(task_layout)
-        
+
         overview_layout.addLayout(second_row_layout)
         
         # 第3行: エンドユーザーと契約会社（幅広く）
@@ -475,8 +666,8 @@ class ProjectsView(QWidget):
         summary_layout = QVBoxLayout()
         summary_layout.addWidget(QLabel("業務内容:"))
         self.summary_edit = QTextEdit()
-        self.summary_edit.setMinimumHeight(80)
-        self.summary_edit.setMaximumHeight(200)
+        self.summary_edit.setMinimumHeight(100)
+        self.summary_edit.setMaximumHeight(150)
         summary_layout.addWidget(self.summary_edit)
         overview_layout.addLayout(summary_layout)
         
@@ -484,8 +675,8 @@ class ProjectsView(QWidget):
         detail_layout = QVBoxLayout()
         detail_layout.addWidget(QLabel("詳細:"))
         self.detail_edit = QTextEdit()
-        self.detail_edit.setMinimumHeight(100)
-        self.detail_edit.setMaximumHeight(300)
+        self.detail_edit.setMinimumHeight(120)
+        self.detail_edit.setMaximumHeight(200)
         detail_layout.addWidget(self.detail_edit)
         overview_layout.addLayout(detail_layout)
         
@@ -547,20 +738,6 @@ class ProjectsView(QWidget):
         layout.addStretch()
     
     
-    def get_selected_role_id(self):
-        """選択された役割IDを取得（最初の選択のみ）"""
-        selected_items = self.role_list.selectedItems()
-        if selected_items:
-            return selected_items[0].data(Qt.UserRole)
-        return None
-    
-    def get_selected_task_id(self):
-        """選択された作業IDを取得（最初の選択のみ）"""
-        selected_items = self.task_list.selectedItems()
-        if selected_items:
-            return selected_items[0].data(Qt.UserRole)
-        return None
-    
     def sync_tech_usages_with_project_selections(self, repo, project_id):
         """プロジェクトの技術選択とtech_usagesを同期"""
         try:
@@ -590,22 +767,34 @@ class ProjectsView(QWidget):
         except Exception as e:
             print(f"技術使用期間同期エラー: {e}")
     
+    def open_role_dialog(self):
+        """役割選択ダイアログを開く"""
+        dialog = RoleSelectionDialog(self.selected_roles, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.selected_roles = dialog.get_selected_ids()
+            # ボタンのテキストを更新
+            names = dialog.get_selected_names()
+            if names:
+                self.role_button.setText(", ".join(names))
+            else:
+                self.role_button.setText("選択...")
+
+    def open_task_dialog(self):
+        """作業選択ダイアログを開く"""
+        dialog = TaskSelectionDialog(self.selected_tasks, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.selected_tasks = dialog.get_selected_ids()
+            # ボタンのテキストを更新
+            names = dialog.get_selected_names()
+            if names:
+                self.task_button.setText(", ".join(names))
+            else:
+                self.task_button.setText("選択...")
+
     def load_masters(self):
         with db_service.session_scope() as session:
             repo = Repository(session)
-            
-            self.role_list.clear()
-            for role in repo.get_master_by_kind('role'):
-                item = QListWidgetItem(role.name)
-                item.setData(Qt.UserRole, role.id)
-                self.role_list.addItem(item)
-            
-            self.task_list.clear()
-            for task in repo.get_master_by_kind('task'):
-                item = QListWidgetItem(task.name)
-                item.setData(Qt.UserRole, task.id)
-                self.task_list.addItem(item)
-            
+
             tech_lists = [
                 ('os', self.os_list),
                 ('language', self.language_list),
@@ -682,42 +871,48 @@ class ProjectsView(QWidget):
     
     def load_project(self, project_id):
         self.current_project_id = project_id
-        
+
         with db_service.session_scope() as session:
             repo = Repository(session)
             project = repo.get_project_by_id(project_id)
-            
+
             if project:
                 self.name_edit.setText(project.name or "")
                 self.summary_edit.setText(project.work_summary or "")
                 self.detail_edit.setText(project.detail or "")
-                
+
                 if project.project_start:
                     self.project_start.setDate(QDate.fromString(project.project_start, "yyyy-MM-dd"))
                 else:
                     self.project_start.setDate(self.project_start.minimumDate())
-                
+
                 if project.project_end:
                     self.project_end.setDate(QDate.fromString(project.project_end, "yyyy-MM-dd"))
                 else:
                     self.project_end.setDate(self.project_end.minimumDate())
-                
-                # 役割の選択を復元
-                self.role_list.clearSelection()
-                for i in range(self.role_list.count()):
-                    item = self.role_list.item(i)
-                    if item.data(Qt.UserRole) == project.role_id:
-                        item.setSelected(True)
-                        break
-                
-                # 作業の選択を復元
-                self.task_list.clearSelection()
-                for i in range(self.task_list.count()):
-                    item = self.task_list.item(i)
-                    if item.data(Qt.UserRole) == project.task_id:
-                        item.setSelected(True)
-                        break
-                
+
+                # 役割の複数選択を復元
+                self.selected_roles = repo.get_project_roles(project_id)
+                role_names = []
+                for role in repo.get_master_by_kind('role'):
+                    if role.id in self.selected_roles:
+                        role_names.append(role.name)
+                if role_names:
+                    self.role_button.setText(", ".join(role_names))
+                else:
+                    self.role_button.setText("選択...")
+
+                # 作業の複数選択を復元
+                self.selected_tasks = repo.get_project_tasks(project_id)
+                task_names = []
+                for task in repo.get_master_by_kind('task'):
+                    if task.id in self.selected_tasks:
+                        task_names.append(task.name)
+                if task_names:
+                    self.task_button.setText(", ".join(task_names))
+                else:
+                    self.task_button.setText("選択...")
+
                 self.scale_edit.setText(project.scale_text or "")
                 self.end_user_edit.setText(project.end_user or "")
                 self.contract_company_edit.setText(project.contract_company or "")
@@ -749,44 +944,73 @@ class ProjectsView(QWidget):
         self.detail_edit.clear()
         self.project_start.setDate(QDate.currentDate())
         self.project_end.setDate(self.project_end.minimumDate())
-        self.role_list.clearSelection()
-        self.task_list.clearSelection()
+
+        # 役割と作業の選択をクリア
+        self.selected_roles = []
+        self.selected_tasks = []
+        self.role_button.setText("選択...")
+        self.task_button.setText("選択...")
+
         self.scale_edit.clear()
         self.end_user_edit.clear()
         self.contract_company_edit.clear()
         self.remarks_edit.clear()
-        
+
         for list_widget in [self.os_list, self.language_list, self.framework_list,
                            self.tool_list, self.cloud_list, self.db_list]:
             list_widget.clearSelection()
     
     def save_project(self):
         try:
+            # バリデーション: プロジェクト名
+            if not self.name_edit.text().strip():
+                QMessageBox.warning(self, "警告", "プロジェクト名を入力してください")
+                self.name_edit.setFocus()
+                return
+
+            # バリデーション: 日付の整合性チェック
+            start_date = self.project_start.date()
+            end_date = self.project_end.date()
+
+            if start_date != self.project_start.minimumDate() and end_date != self.project_end.minimumDate():
+                if start_date > end_date:
+                    reply = QMessageBox.question(
+                        self, "確認",
+                        "開始日が終了日より後になっています。\nこのまま保存しますか？",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                    if reply == QMessageBox.No:
+                        return
+
             is_new_project = False
             data = {
-                'name': self.name_edit.text(),
+                'name': self.name_edit.text().strip(),
                 'work_summary': self.summary_edit.toPlainText(),
                 'detail': self.detail_edit.toPlainText(),
                 'project_start': self.project_start.date().toString("yyyy-MM-dd") if self.project_start.date() != self.project_start.minimumDate() else None,
                 'project_end': self.project_end.date().toString("yyyy-MM-dd") if self.project_end.date() != self.project_end.minimumDate() else None,
-                'role_id': self.get_selected_role_id(),
-                'task_id': self.get_selected_task_id(),
+                'role_id': self.selected_roles[0] if self.selected_roles else None,
+                'task_id': self.selected_tasks[0] if self.selected_tasks else None,
                 'scale_text': self.scale_edit.text(),
                 'end_user': self.end_user_edit.text(),
                 'contract_company': self.contract_company_edit.text(),
                 'remarks': self.remarks_edit.toPlainText()
             }
-            
+
             with db_service.session_scope() as session:
                 repo = Repository(session)
-                
+
                 if self.current_project_id:
                     project = repo.update_project(self.current_project_id, data)
                 else:
                     project = repo.create_project(data)
                     self.current_project_id = project.id
                     is_new_project = True
-                
+
+                # 役割と作業の複数選択を保存
+                repo.link_project_roles(self.current_project_id, self.selected_roles)
+                repo.link_project_tasks(self.current_project_id, self.selected_tasks)
+
                 tech_lists = [
                     ('os', self.os_list),
                     ('language', self.language_list),
@@ -795,7 +1019,7 @@ class ProjectsView(QWidget):
                     ('cloud', self.cloud_list),
                     ('db', self.db_list)
                 ]
-                
+
                 for kind, list_widget in tech_lists:
                     selected_ids = []
                     for i in range(list_widget.count()):
@@ -803,7 +1027,7 @@ class ProjectsView(QWidget):
                         if item.isSelected():
                             selected_ids.append(item.data(Qt.UserRole))
                     repo.link_project_tech(self.current_project_id, kind, selected_ids)
-                
+
                 # プロジェクト保存時に技術使用期間を同期
                 self.sync_tech_usages_with_project_selections(repo, self.current_project_id)
                 
@@ -841,13 +1065,13 @@ class ProjectsView(QWidget):
     def duplicate_project(self):
         if not self.current_project_id:
             return
-        
+
         self.save_project()
-        
+
         with db_service.session_scope() as session:
             repo = Repository(session)
             original = repo.get_project_by_id(self.current_project_id)
-            
+
             if original:
                 data = {
                     'name': f"{original.name} (コピー)",
@@ -862,13 +1086,21 @@ class ProjectsView(QWidget):
                     'contract_company': original.contract_company,
                     'remarks': original.remarks
                 }
-                
+
                 new_project = repo.create_project(data)
-                
+
+                # 役割と作業の複数選択を複製
+                role_ids = repo.get_project_roles(self.current_project_id)
+                repo.link_project_roles(new_project.id, role_ids)
+
+                task_ids = repo.get_project_tasks(self.current_project_id)
+                repo.link_project_tasks(new_project.id, task_ids)
+
+                # 技術を複製
                 for kind in ['os', 'language', 'framework', 'tool', 'cloud', 'db']:
                     tech_ids = repo.get_project_techs(self.current_project_id, kind)
                     repo.link_project_tech(new_project.id, kind, tech_ids)
-        
+
         self.refresh_data()
         self.data_changed.emit()
         QMessageBox.information(self, "成功", "プロジェクトを複製しました")
@@ -891,24 +1123,46 @@ class ProjectsView(QWidget):
             "既存の技術使用期間データは上書きされます。",
             QMessageBox.Yes | QMessageBox.No
         )
-        
+
         if reply == QMessageBox.Yes:
             try:
                 with db_service.session_scope() as session:
                     repo = Repository(session)
                     projects = repo.get_all_projects()
-                    
+
                     synced_count = 0
                     for project in projects:
                         self.sync_tech_usages_with_project_selections(repo, project.id)
                         synced_count += 1
-                    
+
                     self.refresh_data()
                     self.data_changed.emit()
                     QMessageBox.information(
-                        self, "成功", 
+                        self, "成功",
                         f"{synced_count}件のプロジェクトで技術使用期間を同期しました"
                     )
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"同期に失敗しました: {str(e)}")
+
+    def setup_shortcuts(self):
+        """キーボードショートカットを設定"""
+        # Ctrl+S: 保存
+        save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        save_shortcut.activated.connect(self.save_project)
+
+        # Ctrl+N: 新規
+        new_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        new_shortcut.activated.connect(self.new_project)
+
+        # Ctrl+D: 複製
+        duplicate_shortcut = QShortcut(QKeySequence("Ctrl+D"), self)
+        duplicate_shortcut.activated.connect(self.duplicate_project)
+
+        # Delete: 削除
+        delete_shortcut = QShortcut(QKeySequence("Delete"), self)
+        delete_shortcut.activated.connect(self.delete_project)
+
+        # Ctrl+F: 検索フィールドにフォーカス
+        search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        search_shortcut.activated.connect(lambda: self.search_text.setFocus())
     

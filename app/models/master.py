@@ -56,6 +56,13 @@ class DB(Base):
     
     projects = relationship("ProjectDB", back_populates="db")
 
+class Qualification(Base):
+    __tablename__ = "qualifications"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, unique=True, nullable=False)
+    note = Column(Text)
+
 class Role(Base):
     __tablename__ = "roles"
     

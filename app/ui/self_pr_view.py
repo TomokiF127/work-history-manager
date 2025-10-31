@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from services.db import db_service
 from services.repository import Repository
+from ui.styles import BUTTON_STYLES
 
 class SelfPRDialog(QDialog):
     """自己PR編集ダイアログ"""
@@ -87,12 +88,13 @@ class SelfPRView(QWidget):
     
     def init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 10)  # 上の余白を小さく
+        layout.setSpacing(10)  # 要素間の間隔を調整
         
         # タイトル
-        title_layout = QHBoxLayout()
-        title_layout.addWidget(QLabel("自己PR管理"))
-        title_layout.addStretch()
-        layout.addLayout(title_layout)
+        title_label = QLabel("自己PR管理")
+        title_label.setObjectName("titleLabel")
+        layout.addWidget(title_label)
         
         # メインレイアウト
         splitter = QSplitter(Qt.Horizontal)
@@ -122,17 +124,20 @@ class SelfPRView(QWidget):
         crud_layout = QHBoxLayout()
         
         self.new_button = QPushButton("新規追加")
+        self.new_button.setStyleSheet(BUTTON_STYLES['success'])
         self.new_button.setToolTip("新しい自己PR項目を追加します")
         self.new_button.clicked.connect(self.new_pr)
         crud_layout.addWidget(self.new_button)
         
         self.edit_button = QPushButton("編集")
+        self.edit_button.setStyleSheet(BUTTON_STYLES['primary'])
         self.edit_button.setToolTip("選択した項目を編集します（ダブルクリックでも可）")
         self.edit_button.clicked.connect(self.edit_pr)
         self.edit_button.setEnabled(False)
         crud_layout.addWidget(self.edit_button)
         
         self.delete_button = QPushButton("削除")
+        self.delete_button.setStyleSheet(BUTTON_STYLES['danger'])
         self.delete_button.setToolTip("選択した項目を削除します")
         self.delete_button.clicked.connect(self.delete_pr)
         self.delete_button.setEnabled(False)
@@ -144,13 +149,15 @@ class SelfPRView(QWidget):
         order_layout = QHBoxLayout()
         order_layout.addWidget(QLabel("表示順序:"))
         
-        self.up_button = QPushButton("上に移動 ↑")
+        self.up_button = QPushButton("上に移動")
+        self.up_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.up_button.setToolTip("選択した項目を上に移動します")
         self.up_button.clicked.connect(self.move_up)
         self.up_button.setEnabled(False)
         order_layout.addWidget(self.up_button)
         
-        self.down_button = QPushButton("下に移動 ↓")
+        self.down_button = QPushButton("下に移動")
+        self.down_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.down_button.setToolTip("選択した項目を下に移動します")
         self.down_button.clicked.connect(self.move_down)
         self.down_button.setEnabled(False)

@@ -4,10 +4,14 @@ from PySide6.QtWidgets import (
     QFileDialog, QInputDialog
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon, QPalette, QColor
 from ui.projects_view import ProjectsView
 from ui.masters_view import MastersView
 from ui.stats_view import StatsView
 from ui.self_pr_view import SelfPRView
+from ui.qualification_view import QualificationView
+from ui.other_experience_view import OtherExperienceView
+from ui.styles import APP_STYLESHEET, COLORS
 from services.skill_sheet_export import SkillSheetExportService
 from services.db import db_service
 
@@ -20,6 +24,9 @@ class MainWindow(QMainWindow):
         width, height = config.get_window_size()
         self.setGeometry(100, 100, width, height)
         
+        # スタイルシートを適用
+        self.setStyleSheet(APP_STYLESHEET)
+        
         self.init_ui()
         self.init_menu()
         self.init_statusbar()
@@ -31,6 +38,8 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(central_widget)
         
         self.tab_widget = QTabWidget()
+        self.tab_widget.setDocumentMode(True)
+        self.tab_widget.setMovable(False)
         layout.addWidget(self.tab_widget)
         
         self.projects_view = ProjectsView()
@@ -42,12 +51,18 @@ class MainWindow(QMainWindow):
         self.stats_view = StatsView()
         self.tab_widget.addTab(self.stats_view, "経験年数統計")
         
-        self.self_pr_view = SelfPRView()
-        self.tab_widget.addTab(self.self_pr_view, "自己PR管理")
+        # 自己PR・その他経歴を統合した単一ビューを作成
+        from ui.combined_pr_view import CombinedPRView
+        self.combined_pr_view = CombinedPRView()
+        self.tab_widget.addTab(self.combined_pr_view, "自己PR・その他")
+        
+        self.qualification_view = QualificationView()
+        self.tab_widget.addTab(self.qualification_view, "資格管理")
         
         self.projects_view.data_changed.connect(self.on_data_changed)
         self.masters_view.data_changed.connect(self.on_data_changed)
-        self.self_pr_view.data_changed.connect(self.on_data_changed)
+        self.combined_pr_view.data_changed.connect(self.on_data_changed)
+        self.qualification_view.data_changed.connect(self.on_data_changed)
     
     def init_menu(self):
         menubar = self.menuBar()
@@ -84,7 +99,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "職務経歴管理ツールについて",
-            "職務経歴管理ツール v1.5.0\n\n"
+            "職務経歴管理ツール v1.8.0\n\n"
             "プロジェクトと技術経験を管理し、\n"
             "重複なしで経験月数を集計するツールです。\n\n"
             "© 2024 TomokiF127"

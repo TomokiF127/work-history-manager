@@ -9,54 +9,71 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 from typing import List
 from services.db import db_service
 from services.repository import Repository
+from ui.styles import BUTTON_STYLES
 
 class MasterTableModel(QAbstractTableModel):
     def __init__(self, kind, data=None):
         super().__init__()
         self.kind = kind
         self.data_list = []
-        self.headers = ["名称", "備考"]
+        # 役割と作業の場合は順序カラムを追加
+        if kind in ['role', 'task']:
+            self.headers = ["順序", "名称", "備考"]
+        else:
+            self.headers = ["名称", "備考"]
         if data:
             self.update_data(data)
-    
+
     def rowCount(self, parent=QModelIndex()):
         return len(self.data_list)
-    
+
     def columnCount(self, parent=QModelIndex()):
         return len(self.headers)
-    
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-        
+
         item = self.data_list[index.row()]
         col = index.column()
-        
+
         if role == Qt.DisplayRole:
-            if col == 0:
-                return item['name']
-            elif col == 1:
-                return item['note'] or ""
+            if self.kind in ['role', 'task']:
+                if col == 0:
+                    return str(item.get('order_index', 0))
+                elif col == 1:
+                    return item['name']
+                elif col == 2:
+                    return item['note'] or ""
+            else:
+                if col == 0:
+                    return item['name']
+                elif col == 1:
+                    return item['note'] or ""
         elif role == Qt.UserRole:
             return item['id']
-        
+
         return None
-    
+
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return self.headers[section]
         return None
-    
+
     def update_data(self, data):
         self.beginResetModel()
         # SQLAlchemyオブジェクトを辞書に変換してセッション依存を回避
         self.data_list = []
         for item in data:
-            self.data_list.append({
+            item_dict = {
                 'id': item.id,
                 'name': item.name,
                 'note': item.note
-            })
+            }
+            # 役割と作業の場合はorder_indexも保存
+            if self.kind in ['role', 'task'] and hasattr(item, 'order_index'):
+                item_dict['order_index'] = item.order_index
+            self.data_list.append(item_dict)
         self.endResetModel()
 
 class MasterEditDialog(QDialog):
@@ -133,29 +150,47 @@ class MasterTabWidget(QWidget):
     
     def init_ui(self):
         layout = QVBoxLayout(self)
-        
+
         self.table_view = QTableView()
         self.model = MasterTableModel(self.kind)
         self.table_view.setModel(self.model)
         self.table_view.setSelectionBehavior(QTableView.SelectRows)
         self.table_view.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table_view)
-        
+
         button_layout = QHBoxLayout()
-        
+
         self.add_button = QPushButton("追加")
+        self.add_button.setStyleSheet(BUTTON_STYLES['success'])
         self.add_button.clicked.connect(self.add_master)
         button_layout.addWidget(self.add_button)
-        
+
         self.edit_button = QPushButton("編集")
+        self.edit_button.setStyleSheet(BUTTON_STYLES['primary'])
         self.edit_button.clicked.connect(self.edit_master)
         button_layout.addWidget(self.edit_button)
-        
+
         self.delete_button = QPushButton("削除")
+        self.delete_button.setStyleSheet(BUTTON_STYLES['danger'])
         self.delete_button.clicked.connect(self.delete_master)
         button_layout.addWidget(self.delete_button)
-        
-        button_layout.addStretch()
+
+        # 役割と作業の場合は並び替えボタンを追加
+        if self.kind in ['role', 'task']:
+            button_layout.addStretch()
+
+            self.move_up_button = QPushButton("↑ 上へ")
+            self.move_up_button.setStyleSheet(BUTTON_STYLES['secondary'])
+            self.move_up_button.clicked.connect(self.move_up)
+            button_layout.addWidget(self.move_up_button)
+
+            self.move_down_button = QPushButton("↓ 下へ")
+            self.move_down_button.setStyleSheet(BUTTON_STYLES['secondary'])
+            self.move_down_button.clicked.connect(self.move_down)
+            button_layout.addWidget(self.move_down_button)
+        else:
+            button_layout.addStretch()
+
         layout.addLayout(button_layout)
     
     def refresh_data(self):
@@ -206,28 +241,76 @@ class MasterTabWidget(QWidget):
         if not current.isValid():
             QMessageBox.warning(self, "警告", f"{self.title}を選択してください")
             return
-        
+
         master_id = self.model.data(current.siblingAtColumn(0), Qt.UserRole)
-        name = self.model.data(current.siblingAtColumn(0), Qt.DisplayRole)
-        
+        # 役割・作業の場合は名前が2列目
+        name_col = 1 if self.kind in ['role', 'task'] else 0
+        name = self.model.data(current.siblingAtColumn(name_col), Qt.DisplayRole)
+
         reply = QMessageBox.question(
             self, "確認",
             f"{self.title}「{name}」を削除しますか？\n"
             "関連するプロジェクトからも削除されます。",
             QMessageBox.Yes | QMessageBox.No
         )
-        
+
         if reply == QMessageBox.Yes:
             try:
                 with db_service.session_scope() as session:
                     repo = Repository(session)
                     repo.delete_master(self.kind, master_id)
-                
+
                 self.refresh_data()
                 self.data_changed.emit()
                 QMessageBox.information(self, "成功", f"{self.title}を削除しました")
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"削除に失敗しました: {str(e)}")
+
+    def move_up(self):
+        """選択されたアイテムを上に移動"""
+        current = self.table_view.currentIndex()
+        if not current.isValid():
+            QMessageBox.warning(self, "警告", f"{self.title}を選択してください")
+            return
+
+        master_id = self.model.data(current.siblingAtColumn(0), Qt.UserRole)
+
+        try:
+            with db_service.session_scope() as session:
+                repo = Repository(session)
+                if repo.move_master_up(self.kind, master_id):
+                    self.refresh_data()
+                    self.data_changed.emit()
+                    # 移動後も同じ行を選択状態に（1つ上になる）
+                    new_row = max(0, current.row() - 1)
+                    self.table_view.selectRow(new_row)
+                else:
+                    QMessageBox.information(self, "情報", "これ以上上に移動できません")
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"移動に失敗しました: {str(e)}")
+
+    def move_down(self):
+        """選択されたアイテムを下に移動"""
+        current = self.table_view.currentIndex()
+        if not current.isValid():
+            QMessageBox.warning(self, "警告", f"{self.title}を選択してください")
+            return
+
+        master_id = self.model.data(current.siblingAtColumn(0), Qt.UserRole)
+
+        try:
+            with db_service.session_scope() as session:
+                repo = Repository(session)
+                if repo.move_master_down(self.kind, master_id):
+                    self.refresh_data()
+                    self.data_changed.emit()
+                    # 移動後も同じ行を選択状態に（1つ下になる）
+                    new_row = min(self.model.rowCount() - 1, current.row() + 1)
+                    self.table_view.selectRow(new_row)
+                else:
+                    QMessageBox.information(self, "情報", "これ以上下に移動できません")
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"移動に失敗しました: {str(e)}")
 
 class MastersView(QWidget):
     data_changed = Signal()
@@ -249,6 +332,7 @@ class MastersView(QWidget):
             ('tool', 'ツール'),
             ('cloud', 'クラウド'),
             ('db', 'データベース'),
+            ('qualification', '資格'),
             ('role', '役割'),
             ('task', '作業担当')
         ]

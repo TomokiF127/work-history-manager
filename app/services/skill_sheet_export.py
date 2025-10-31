@@ -31,14 +31,23 @@ class SkillSheetExportService:
         self.stats_service = StatsService(session)
     
     def _set_table_borders(self, table):
-        """テーブルに罫線を設定"""
+        """テーブルに罫線を設定（縦罫線は破線）"""
         tbl = table._tbl
         tbl_borders = OxmlElement('w:tblBorders')
         
-        # 罫線の種類と太さを設定
-        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+        # 外枠は実線、縦罫線は破線に設定
+        border_settings = {
+            'top': 'single',
+            'left': 'single', 
+            'bottom': 'single',
+            'right': 'single',
+            'insideH': 'single',  # 横線は実線
+            'insideV': 'dashed'   # 縦線は破線
+        }
+        
+        for border_name, border_style in border_settings.items():
             border = OxmlElement(f'w:{border_name}')
-            border.set(qn('w:val'), 'single')
+            border.set(qn('w:val'), border_style)
             border.set(qn('w:sz'), '4')  # 0.5pt
             border.set(qn('w:space'), '0')
             border.set(qn('w:color'), '000000')
@@ -67,7 +76,7 @@ class SkillSheetExportService:
             
             # フォント設定
             for run in paragraph.runs:
-                run.font.name = 'MS ゴシック'
+                run.font.name = 'MS 明朝'
                 run.font.size = Pt(9)
     
     def _format_header_cell(self, cell, text):
@@ -82,7 +91,7 @@ class SkillSheetExportService:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in paragraph.runs:
                 run.font.bold = True
-                run.font.name = 'MS ゴシック'
+                run.font.name = 'MS 明朝'
                 run.font.size = Pt(9)
     
     def generate_skill_sheet_data(self, name: str = "氏名") -> Dict[str, Any]:
@@ -102,7 +111,8 @@ class SkillSheetExportService:
             },
             "projects": self._generate_projects_data(),
             "technical_skills": self._generate_technical_skills_data(),
-            "qualifications": [],  # TODO: 資格管理機能が必要
+            "qualifications": self._generate_qualification_data(),
+            "other_experiences": self._generate_other_experience_data(),
             "self_pr": self._generate_self_pr_data()
         }
         
@@ -152,12 +162,13 @@ class SkillSheetExportService:
                     "task": self._get_project_tasks_sorted(project.id),
                     "team_size": project.scale_text or "",
                     "contract_company": company,
-                    "end_user": project.end_user or ""
+                    "end_user": project.end_user or "",
+                    "_sort_key": project.project_start or "1900-01-01"  # ソート用キーを追加
                 }
                 result.append(project_data)
         
-        # 開始日の新しい順にソート
-        result.sort(key=lambda p: p.get("project_period", ""), reverse=True)
+        # プロジェクト開始日の新しい順にソート（新しい案件が最初に来る）
+        result.sort(key=lambda p: p.get("_sort_key", "1900-01-01"), reverse=True)
         
         return result
     
@@ -257,6 +268,61 @@ class SkillSheetExportService:
             for pr in prs
         ]
     
+    def _generate_qualification_data(self) -> List[Dict[str, str]]:
+        """取得資格データを生成"""
+        qualifications = self.repo.get_all_user_qualifications()
+        
+        return [
+            {
+                "name": qual.qualification.name,
+                "date": qual.obtained_date.strftime("%Y年%m月") if qual.obtained_date else "",
+                "note": qual.note or ""
+            }
+            for qual in qualifications
+        ]
+    
+    def _generate_other_experience_data(self) -> List[Dict[str, str]]:
+        """その他経歴データを生成"""
+        experiences = self.repo.get_all_other_experiences()
+        
+        return [
+            {
+                "title": exp.title,
+                "period": self._format_period_simple(exp.start_date, exp.end_date),
+                "content": exp.content,
+                "note": exp.note or ""
+            }
+            for exp in experiences
+        ]
+    
+    def _format_period_simple(self, start_date, end_date) -> str:
+        """シンプルな期間フォーマット"""
+        if not start_date and not end_date:
+            return ""
+        
+        try:
+            start_str = ""
+            end_str = ""
+            
+            if start_date:
+                start_str = start_date.strftime("%Y年%m月")
+            
+            if end_date:
+                end_str = end_date.strftime("%Y年%m月")
+            else:
+                end_str = "継続中"
+            
+            if start_str and end_str:
+                return f"{start_str}～{end_str}"
+            elif start_str:
+                return f"{start_str}～"
+            elif end_str:
+                return f"～{end_str}"
+            else:
+                return ""
+        except:
+            return ""
+    
     def _format_period(self, start_date: Optional[str], end_date: Optional[str]) -> str:
         """期間をフォーマット"""
         if not start_date:
@@ -347,48 +413,48 @@ class SkillSheetExportService:
         data = self.generate_skill_sheet_data(name)
         doc = Document()
         
-        # ページ設定とマージン
+        # ページ設定とマージン（狭めに調整）
         sections = doc.sections
         for section in sections:
-            section.top_margin = Cm(2.54)  # 2.54cm
-            section.bottom_margin = Cm(2.54)
-            section.left_margin = Cm(2.54)
-            section.right_margin = Cm(2.54)
+            section.top_margin = Cm(2.0)    # 2.54から2.0に
+            section.bottom_margin = Cm(2.0) # 2.54から2.0に
+            section.left_margin = Cm(2.0)   # 2.54から2.0に
+            section.right_margin = Cm(2.0)  # 2.54から2.0に
             section.page_height = Cm(29.7)  # A4
             section.page_width = Cm(21.0)
         
         # ドキュメント全体のフォント設定
         style = doc.styles['Normal']
         font = style.font
-        font.name = 'MS ゴシック'  # より標準的なフォント
-        font.size = Pt(10.5)
+        font.name = 'MS 明朝'
+        font.size = Pt(9)
         
-        # ヘッダー
-        title = doc.add_heading(data["header"]["title"], level=0)
+        # ヘッダー（段落として作成、下線なし）
+        title = doc.add_paragraph()
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        title_run = title.runs[0]
-        title_run.font.name = 'MS ゴシック'
-        title_run.font.size = Pt(18)
+        title_run = title.add_run(data["header"]["title"])
+        title_run.font.name = 'MS 明朝'
+        title_run.font.size = Pt(9)
         title_run.font.bold = True
         
         # 日付と氏名を右寄せ
         date_para = doc.add_paragraph()
         date_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         date_run = date_para.add_run(data["header"]["date"])
-        date_run.font.name = 'MS ゴシック'
-        date_run.font.size = Pt(10.5)
+        date_run.font.name = 'MS 明朝'
+        date_run.font.size = Pt(9)
         
         name_para = doc.add_paragraph()
         name_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         name_run = name_para.add_run(f"氏名：{data['header']['name']}")
-        name_run.font.name = 'MS ゴシック'
-        name_run.font.size = Pt(10.5)
+        name_run.font.name = 'MS 明朝'
+        name_run.font.size = Pt(9)
         
         # 開発経歴セクション
         history_para = doc.add_paragraph()
         history_run = history_para.add_run(f"開発経歴（{self._get_career_period()}）")
-        history_run.font.name = 'MS ゴシック'
-        history_run.font.size = Pt(12)
+        history_run.font.name = 'MS 明朝'
+        history_run.font.size = Pt(9)
         history_run.font.bold = True
         
         # プロジェクトテーブル
@@ -470,8 +536,8 @@ class SkillSheetExportService:
         doc.add_page_break()
         skill_heading = doc.add_paragraph()
         skill_run = skill_heading.add_run("■　テクニカルスキル")
-        skill_run.font.name = 'MS ゴシック'
-        skill_run.font.size = Pt(12)
+        skill_run.font.name = 'MS 明朝'
+        skill_run.font.size = Pt(9)
         skill_run.font.bold = True
         
         if data["technical_skills"]:
@@ -514,13 +580,82 @@ class SkillSheetExportService:
                     row_cells[2].text = tech_experiences
                     row_cells[3].text = ""  # 補足は空欄（将来的に追加可能）
         
+        # 取得資格
+        if data["qualifications"]:
+            qualification_heading = doc.add_paragraph()
+            qualification_run = qualification_heading.add_run("■　取得資格")
+            qualification_run.font.name = 'MS 明朝'
+            qualification_run.font.size = Pt(9)
+            qualification_run.font.bold = True
+            
+            qual_table = doc.add_table(rows=1, cols=3)
+            self._set_table_borders(qual_table)
+            
+            # ヘッダー行
+            qual_header_cells = qual_table.rows[0].cells
+            self._format_header_cell(qual_header_cells[0], "資格名")
+            self._format_header_cell(qual_header_cells[1], "取得年月")
+            self._format_header_cell(qual_header_cells[2], "備考")
+            
+            # 列幅設定
+            self._set_cell_properties(qual_header_cells[0], width_cm=8.0)
+            self._set_cell_properties(qual_header_cells[1], width_cm=3.0)
+            self._set_cell_properties(qual_header_cells[2], width_cm=9.0)
+            
+            # 資格データ
+            for qual in data["qualifications"]:
+                row_cells = qual_table.add_row().cells
+                
+                for i, cell in enumerate(row_cells):
+                    widths = [8.0, 3.0, 9.0]
+                    self._set_cell_properties(cell, width_cm=widths[i], vertical_align='top')
+                
+                row_cells[0].text = qual["name"]
+                row_cells[1].text = qual["date"]
+                row_cells[2].text = qual["note"]
+        
+        # その他経歴
+        if data["other_experiences"]:
+            other_heading = doc.add_paragraph()
+            other_run = other_heading.add_run("■　その他経歴（学習）")
+            other_run.font.name = 'MS 明朝'
+            other_run.font.size = Pt(9)
+            other_run.font.bold = True
+            
+            for exp in data["other_experiences"]:
+                # タイトルと期間
+                title_para = doc.add_paragraph()
+                title_text = exp["title"]
+                if exp["period"]:
+                    title_text += f"　（{exp['period']}）"
+                title_run = title_para.add_run(f"◆{title_text}")
+                title_run.font.name = 'MS 明朝'
+                title_run.font.size = Pt(9)
+                title_run.font.bold = True
+                
+                # 内容
+                content_para = doc.add_paragraph()
+                content_run = content_para.add_run(exp["content"])
+                content_run.font.name = 'MS 明朝'
+                content_run.font.size = Pt(9)
+                
+                # 備考があれば追加
+                if exp["note"]:
+                    note_para = doc.add_paragraph()
+                    note_run = note_para.add_run(f"※{exp['note']}")
+                    note_run.font.name = 'MS 明朝'
+                    note_run.font.size = Pt(9)
+                    note_run.font.italic = True
+                
+                doc.add_paragraph()  # 項目間のスペース
+        
         # 自己PR
         if data["self_pr"]:
             doc.add_page_break()
             pr_heading = doc.add_paragraph()
             pr_run = pr_heading.add_run("■　自己PR")
-            pr_run.font.name = 'MS ゴシック'
-            pr_run.font.size = Pt(12)
+            pr_run.font.name = 'MS 明朝'
+            pr_run.font.size = Pt(9)
             pr_run.font.bold = True
             
             for i, pr in enumerate(data["self_pr"]):
@@ -530,15 +665,15 @@ class SkillSheetExportService:
                 # サブタイトル
                 subtitle_para = doc.add_paragraph()
                 subtitle_run = subtitle_para.add_run(f"◆{pr['title']}")
-                subtitle_run.font.name = 'MS ゴシック'
-                subtitle_run.font.size = Pt(11)
+                subtitle_run.font.name = 'MS 明朝'
+                subtitle_run.font.size = Pt(9)
                 subtitle_run.font.bold = True
                 
                 # 内容
                 content_para = doc.add_paragraph()
                 content_run = content_para.add_run(pr['content'])
-                content_run.font.name = 'MS ゴシック'
-                content_run.font.size = Pt(10.5)
+                content_run.font.name = 'MS 明朝'
+                content_run.font.size = Pt(9)
                 
                 # 行間設定
                 content_para.paragraph_format.line_spacing = 1.2
@@ -616,6 +751,33 @@ class SkillSheetExportService:
                 content.append("|------|----------|")
                 for skill in skills:
                     content.append(f"| {skill['name']} | {skill['experience']} |")
+                content.append("")
+        
+        # 取得資格
+        if data["qualifications"]:
+            content.append("## 取得資格")
+            content.append("")
+            content.append("| 資格名 | 取得年月 | 備考 |")
+            content.append("|--------|----------|------|")
+            for qual in data["qualifications"]:
+                content.append(f"| {qual['name']} | {qual['date']} | {qual['note']} |")
+            content.append("")
+        
+        # その他経歴
+        if data["other_experiences"]:
+            content.append("## その他経歴（学習）")
+            content.append("")
+            
+            for exp in data["other_experiences"]:
+                title = exp['title']
+                if exp['period']:
+                    title += f"　（{exp['period']}）"
+                content.append(f"### ◆{title}")
+                content.append("")
+                content.append(exp['content'])
+                if exp['note']:
+                    content.append("")
+                    content.append(f"※{exp['note']}")
                 content.append("")
         
         # 自己PR

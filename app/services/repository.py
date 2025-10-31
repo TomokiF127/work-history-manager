@@ -6,8 +6,12 @@ from models import (
     Project, Engagement, TechUsage, SelfPR,
     OS, Language, Framework, Tool, Cloud, DB, Role, Task,
     ProjectOS, ProjectLanguage, ProjectFramework,
-    ProjectTool, ProjectCloud, ProjectDB
+    ProjectTool, ProjectCloud, ProjectDB,
+    ProjectRole, ProjectTask
 )
+from models.master import Qualification
+from models.qualification import UserQualification
+from models.other_experience import OtherExperience
 
 class Repository:
     def __init__(self, session: Session):
@@ -49,6 +53,7 @@ class Repository:
             'tool': Tool,
             'cloud': Cloud,
             'db': DB,
+            'qualification': Qualification,
             'role': Role,
             'task': Task
         }
@@ -69,12 +74,19 @@ class Repository:
             'tool': Tool,
             'cloud': Cloud,
             'db': DB,
+            'qualification': Qualification,
             'role': Role,
             'task': Task
         }
         model = master_map.get(kind)
         if model:
-            instance = model(name=name, note=note)
+            # 役割と作業の場合はorder_indexを自動設定
+            if kind in ['role', 'task']:
+                # 最大のorder_indexを取得
+                max_order = self.session.query(model).count()
+                instance = model(name=name, note=note, order_index=max_order)
+            else:
+                instance = model(name=name, note=note)
             self.session.add(instance)
             self.session.flush()
             return instance
@@ -88,6 +100,7 @@ class Repository:
             'tool': Tool,
             'cloud': Cloud,
             'db': DB,
+            'qualification': Qualification,
             'role': Role,
             'task': Task
         }
@@ -109,6 +122,7 @@ class Repository:
             'tool': Tool,
             'cloud': Cloud,
             'db': DB,
+            'qualification': Qualification,
             'role': Role,
             'task': Task
         }
@@ -119,6 +133,56 @@ class Repository:
                 self.session.delete(instance)
                 self.session.flush()
                 return True
+        return False
+
+    def move_master_up(self, kind: str, master_id: int) -> bool:
+        """マスタを1つ上に移動（order_indexを小さくする）"""
+        if kind not in ['role', 'task']:
+            return False
+
+        model = Role if kind == 'role' else Task
+
+        # 対象アイテムを取得
+        target = self.session.query(model).filter_by(id=master_id).first()
+        if not target:
+            return False
+
+        # 1つ上のアイテムを取得（order_indexが小さい方）
+        prev_item = self.session.query(model).filter(
+            model.order_index < target.order_index
+        ).order_by(model.order_index.desc()).first()
+
+        if prev_item:
+            # order_indexを入れ替え
+            target.order_index, prev_item.order_index = prev_item.order_index, target.order_index
+            self.session.flush()
+            return True
+
+        return False
+
+    def move_master_down(self, kind: str, master_id: int) -> bool:
+        """マスタを1つ下に移動（order_indexを大きくする）"""
+        if kind not in ['role', 'task']:
+            return False
+
+        model = Role if kind == 'role' else Task
+
+        # 対象アイテムを取得
+        target = self.session.query(model).filter_by(id=master_id).first()
+        if not target:
+            return False
+
+        # 1つ下のアイテムを取得（order_indexが大きい方）
+        next_item = self.session.query(model).filter(
+            model.order_index > target.order_index
+        ).order_by(model.order_index.asc()).first()
+
+        if next_item:
+            # order_indexを入れ替え
+            target.order_index, next_item.order_index = next_item.order_index, target.order_index
+            self.session.flush()
+            return True
+
         return False
     
     def get_engagements_by_project(self, project_id: int) -> List[Engagement]:
@@ -205,13 +269,47 @@ class Repository:
             'cloud': (ProjectCloud, 'cloud_id'),
             'db': (ProjectDB, 'db_id')
         }
-        
+
         if kind not in relation_map:
             return []
-        
+
         model, tech_field = relation_map[kind]
         results = self.session.query(model).filter_by(project_id=project_id).all()
         return [getattr(r, tech_field) for r in results]
+
+    def link_project_roles(self, project_id: int, role_ids: List[int]):
+        """プロジェクトに役割を複数関連付ける"""
+        # 既存の関連を削除
+        self.session.query(ProjectRole).filter_by(project_id=project_id).delete()
+
+        # 新しい関連を追加
+        for role_id in role_ids:
+            relation = ProjectRole(project_id=project_id, role_id=role_id)
+            self.session.add(relation)
+
+        self.session.flush()
+
+    def get_project_roles(self, project_id: int) -> List[int]:
+        """プロジェクトに関連付けられた役割IDのリストを取得"""
+        results = self.session.query(ProjectRole).filter_by(project_id=project_id).all()
+        return [r.role_id for r in results]
+
+    def link_project_tasks(self, project_id: int, task_ids: List[int]):
+        """プロジェクトに作業を複数関連付ける"""
+        # 既存の関連を削除
+        self.session.query(ProjectTask).filter_by(project_id=project_id).delete()
+
+        # 新しい関連を追加
+        for task_id in task_ids:
+            relation = ProjectTask(project_id=project_id, task_id=task_id)
+            self.session.add(relation)
+
+        self.session.flush()
+
+    def get_project_tasks(self, project_id: int) -> List[int]:
+        """プロジェクトに関連付けられた作業IDのリストを取得"""
+        results = self.session.query(ProjectTask).filter_by(project_id=project_id).all()
+        return [r.task_id for r in results]
     
     def auto_generate_tech_usages_from_project(self, project_id: int):
         project = self.get_project_by_id(project_id)
@@ -362,4 +460,80 @@ class Repository:
             pr = self.get_self_pr_by_id(item['id'])
             if pr:
                 pr.order_index = item['order']
+        self.session.flush()
+    
+    # 資格取得年月の管理
+    def get_all_user_qualifications(self) -> List[UserQualification]:
+        """全ての取得資格を取得"""
+        return self.session.query(UserQualification).join(Qualification).order_by(UserQualification.obtained_date.desc()).all()
+    
+    def get_user_qualification_by_id(self, qualification_id: int) -> Optional[UserQualification]:
+        """IDで取得資格を取得"""
+        return self.session.query(UserQualification).filter_by(id=qualification_id).first()
+    
+    def create_user_qualification(self, data: Dict[str, Any]) -> UserQualification:
+        """取得資格を作成"""
+        qualification = UserQualification(**data)
+        self.session.add(qualification)
+        self.session.flush()
+        return qualification
+    
+    def update_user_qualification(self, qualification_id: int, data: Dict[str, Any]) -> Optional[UserQualification]:
+        """取得資格を更新"""
+        qualification = self.get_user_qualification_by_id(qualification_id)
+        if qualification:
+            for key, value in data.items():
+                setattr(qualification, key, value)
+            self.session.flush()
+        return qualification
+    
+    def delete_user_qualification(self, qualification_id: int) -> bool:
+        """取得資格を削除"""
+        qualification = self.get_user_qualification_by_id(qualification_id)
+        if qualification:
+            self.session.delete(qualification)
+            self.session.flush()
+            return True
+        return False
+    
+    # その他経歴の管理
+    def get_all_other_experiences(self) -> List[OtherExperience]:
+        """全てのその他経歴を取得"""
+        return self.session.query(OtherExperience).filter_by(is_active=1).order_by(OtherExperience.order_index).all()
+    
+    def get_other_experience_by_id(self, experience_id: int) -> Optional[OtherExperience]:
+        """IDでその他経歴を取得"""
+        return self.session.query(OtherExperience).filter_by(id=experience_id).first()
+    
+    def create_other_experience(self, data: Dict[str, Any]) -> OtherExperience:
+        """その他経歴を作成"""
+        experience = OtherExperience(**data)
+        self.session.add(experience)
+        self.session.flush()
+        return experience
+    
+    def update_other_experience(self, experience_id: int, data: Dict[str, Any]) -> Optional[OtherExperience]:
+        """その他経歴を更新"""
+        experience = self.get_other_experience_by_id(experience_id)
+        if experience:
+            for key, value in data.items():
+                setattr(experience, key, value)
+            self.session.flush()
+        return experience
+    
+    def delete_other_experience(self, experience_id: int) -> bool:
+        """その他経歴を削除"""
+        experience = self.get_other_experience_by_id(experience_id)
+        if experience:
+            experience.is_active = 0
+            self.session.flush()
+            return True
+        return False
+    
+    def reorder_other_experiences(self, experience_orders: List[Dict[str, int]]):
+        """その他経歴の順序を変更"""
+        for item in experience_orders:
+            experience = self.get_other_experience_by_id(item['id'])
+            if experience:
+                experience.order_index = item['order']
         self.session.flush()

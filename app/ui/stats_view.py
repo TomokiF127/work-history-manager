@@ -11,6 +11,7 @@ from services.db import db_service
 from services.stats import StatsService
 from services.export import ExportService
 from services.repository import Repository
+from ui.styles import BUTTON_STYLES
 
 class StatsTableModel(QAbstractTableModel):
     def __init__(self, data=None):
@@ -76,10 +77,12 @@ class CategoryStatsTab(QWidget):
         export_layout = QHBoxLayout()
         
         self.export_csv_button = QPushButton("CSVエクスポート")
+        self.export_csv_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.export_csv_button.clicked.connect(self.export_csv)
         export_layout.addWidget(self.export_csv_button)
         
         self.export_md_button = QPushButton("Markdownエクスポート")
+        self.export_md_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.export_md_button.clicked.connect(self.export_md)
         export_layout.addWidget(self.export_md_button)
         
@@ -197,16 +200,19 @@ class StatsView(QWidget):
         filter_layout.addWidget(self.end_date)
         
         self.apply_filter_button = QPushButton("フィルタ適用")
+        self.apply_filter_button.setStyleSheet(BUTTON_STYLES['primary'])
         self.apply_filter_button.clicked.connect(self.apply_filter)
         filter_layout.addWidget(self.apply_filter_button)
         
         self.clear_filter_button = QPushButton("クリア")
+        self.clear_filter_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.clear_filter_button.clicked.connect(self.clear_filter)
         filter_layout.addWidget(self.clear_filter_button)
         
         filter_layout.addStretch()
         
         self.export_all_button = QPushButton("全カテゴリ一括エクスポート")
+        self.export_all_button.setStyleSheet(BUTTON_STYLES['success'])
         self.export_all_button.clicked.connect(self.export_all)
         filter_layout.addWidget(self.export_all_button)
         
