@@ -82,11 +82,11 @@ if not exist "venv" (
         pip install -r requirements.txt --no-cache-dir 2>nul
 
         REM 重要なパッケージがインストールされているか確認
-        python -c "import PySide6; import sqlalchemy; import python_docx" 2>nul
+        python -c "import PySide6; import sqlalchemy; import docx" 2>nul
         if errorlevel 1 (
             echo   ⚠️  エラーが発生しましたが、再試行します...
             pip install -r requirements.txt --no-cache-dir
-            python -c "import PySide6; import sqlalchemy; import python_docx" 2>nul
+            python -c "import PySide6; import sqlalchemy; import docx" 2>nul
             if errorlevel 1 (
                 echo   ❌ 依存パッケージのインストールに失敗しました
                 echo.

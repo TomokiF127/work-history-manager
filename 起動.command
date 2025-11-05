@@ -85,7 +85,7 @@ if [ ! -d "venv" ]; then
         pip install -r requirements.txt 2>&1 | grep -v "TypeError: encode()" | grep -v "SyntaxError: invalid syntax" || true
 
         # 重要なパッケージがインストールされているか確認
-        python -c "import PySide6; import sqlalchemy; import python_docx" 2>/dev/null
+        python -c "import PySide6; import sqlalchemy; import docx" 2>/dev/null
         if [ $? -eq 0 ]; then
             echo "  ✅ 依存パッケージをインストールしました"
         else
@@ -93,7 +93,7 @@ if [ ! -d "venv" ]; then
             # PIP_NO_COMPILE=1を設定してコンパイルをスキップ
             PIP_NO_COMPILE=1 pip install -r requirements.txt --no-cache-dir
 
-            python -c "import PySide6; import sqlalchemy; import python_docx" 2>/dev/null
+            python -c "import PySide6; import sqlalchemy; import docx" 2>/dev/null
             if [ $? -eq 0 ]; then
                 echo "  ✅ 依存パッケージをインストールしました"
             else
