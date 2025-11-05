@@ -7,7 +7,7 @@ from models import (
     OS, Language, Framework, Tool, Cloud, DB, Role, Task,
     ProjectOS, ProjectLanguage, ProjectFramework,
     ProjectTool, ProjectCloud, ProjectDB,
-    ProjectRole, ProjectTask
+    ProjectRole, ProjectTask, ProficiencyLevel
 )
 from models.master import Qualification
 from models.qualification import UserQualification
@@ -55,18 +55,19 @@ class Repository:
             'db': DB,
             'qualification': Qualification,
             'role': Role,
-            'task': Task
+            'task': Task,
+            'proficiency': ProficiencyLevel
         }
         model = master_map.get(kind)
         if model:
-            # 役割と作業は順序で並び替え、その他は名前で並び替え
-            if kind in ['role', 'task']:
+            # 役割と作業と習熟度は順序で並び替え、その他は名前で並び替え
+            if kind in ['role', 'task', 'proficiency']:
                 return self.session.query(model).order_by(model.order_index, model.name).all()
             else:
                 return self.session.query(model).order_by(model.name).all()
         return []
     
-    def create_master(self, kind: str, name: str, note: str = None) -> Optional[Any]:
+    def create_master(self, kind: str, name: str, note: str = None, proficiency_id: int = None) -> Optional[Any]:
         master_map = {
             'os': OS,
             'language': Language,
@@ -76,23 +77,28 @@ class Repository:
             'db': DB,
             'qualification': Qualification,
             'role': Role,
-            'task': Task
+            'task': Task,
+            'proficiency': ProficiencyLevel
         }
         model = master_map.get(kind)
         if model:
-            # 役割と作業の場合はorder_indexを自動設定
-            if kind in ['role', 'task']:
+            # 役割と作業と習熟度の場合はorder_indexを自動設定
+            if kind in ['role', 'task', 'proficiency']:
                 # 最大のorder_indexを取得
                 max_order = self.session.query(model).count()
                 instance = model(name=name, note=note, order_index=max_order)
             else:
-                instance = model(name=name, note=note)
+                # 技術マスタの場合は習熟度も設定
+                if kind in ['os', 'language', 'framework', 'tool', 'cloud', 'db']:
+                    instance = model(name=name, note=note, proficiency_id=proficiency_id)
+                else:
+                    instance = model(name=name, note=note)
             self.session.add(instance)
             self.session.flush()
             return instance
         return None
     
-    def update_master(self, kind: str, master_id: int, name: str, note: str = None) -> bool:
+    def update_master(self, kind: str, master_id: int, name: str, note: str = None, proficiency_id: int = None) -> bool:
         master_map = {
             'os': OS,
             'language': Language,
@@ -102,7 +108,8 @@ class Repository:
             'db': DB,
             'qualification': Qualification,
             'role': Role,
-            'task': Task
+            'task': Task,
+            'proficiency': ProficiencyLevel
         }
         model = master_map.get(kind)
         if model:
@@ -110,6 +117,9 @@ class Repository:
             if instance:
                 instance.name = name
                 instance.note = note
+                # 技術マスタの場合は習熟度も更新
+                if kind in ['os', 'language', 'framework', 'tool', 'cloud', 'db']:
+                    instance.proficiency_id = proficiency_id
                 self.session.flush()
                 return True
         return False
@@ -124,7 +134,8 @@ class Repository:
             'db': DB,
             'qualification': Qualification,
             'role': Role,
-            'task': Task
+            'task': Task,
+            'proficiency': ProficiencyLevel
         }
         model = master_map.get(kind)
         if model:
@@ -135,22 +146,59 @@ class Repository:
                 return True
         return False
 
+    def normalize_master_order(self, kind: str):
+        """マスタのorder_indexを0から連番に正規化"""
+        if kind not in ['role', 'task', 'proficiency']:
+            return
+
+        model_map = {
+            'role': Role,
+            'task': Task,
+            'proficiency': ProficiencyLevel
+        }
+        model = model_map.get(kind)
+        if not model:
+            return
+
+        # 現在のorder_indexでソートして取得
+        items = self.session.query(model).order_by(model.order_index, model.id).all()
+
+        # 0から連番に振り直す
+        for index, item in enumerate(items):
+            item.order_index = index
+
+        self.session.flush()
+
     def move_master_up(self, kind: str, master_id: int) -> bool:
         """マスタを1つ上に移動（order_indexを小さくする）"""
-        if kind not in ['role', 'task']:
+        if kind not in ['role', 'task', 'proficiency']:
             return False
 
-        model = Role if kind == 'role' else Task
+        # 順序を正規化
+        self.normalize_master_order(kind)
+
+        model_map = {
+            'role': Role,
+            'task': Task,
+            'proficiency': ProficiencyLevel
+        }
+        model = model_map.get(kind)
+        if not model:
+            return False
 
         # 対象アイテムを取得
         target = self.session.query(model).filter_by(id=master_id).first()
         if not target:
             return False
 
-        # 1つ上のアイテムを取得（order_indexが小さい方）
+        # すでに一番上の場合
+        if target.order_index == 0:
+            return False
+
+        # 1つ上のアイテムを取得
         prev_item = self.session.query(model).filter(
-            model.order_index < target.order_index
-        ).order_by(model.order_index.desc()).first()
+            model.order_index == target.order_index - 1
+        ).first()
 
         if prev_item:
             # order_indexを入れ替え
@@ -162,20 +210,37 @@ class Repository:
 
     def move_master_down(self, kind: str, master_id: int) -> bool:
         """マスタを1つ下に移動（order_indexを大きくする）"""
-        if kind not in ['role', 'task']:
+        if kind not in ['role', 'task', 'proficiency']:
             return False
 
-        model = Role if kind == 'role' else Task
+        # 順序を正規化
+        self.normalize_master_order(kind)
+
+        model_map = {
+            'role': Role,
+            'task': Task,
+            'proficiency': ProficiencyLevel
+        }
+        model = model_map.get(kind)
+        if not model:
+            return False
 
         # 対象アイテムを取得
         target = self.session.query(model).filter_by(id=master_id).first()
         if not target:
             return False
 
-        # 1つ下のアイテムを取得（order_indexが大きい方）
+        # 最大のorder_indexを取得
+        max_order = self.session.query(model).count() - 1
+
+        # すでに一番下の場合
+        if target.order_index >= max_order:
+            return False
+
+        # 1つ下のアイテムを取得
         next_item = self.session.query(model).filter(
-            model.order_index > target.order_index
-        ).order_by(model.order_index.asc()).first()
+            model.order_index == target.order_index + 1
+        ).first()
 
         if next_item:
             # order_indexを入れ替え
@@ -184,7 +249,26 @@ class Repository:
             return True
 
         return False
-    
+
+    def update_tech_proficiency(self, kind: str, tech_id: int, proficiency_id: Optional[int]) -> bool:
+        """技術の習熟度を更新"""
+        tech_map = {
+            'os': OS,
+            'language': Language,
+            'framework': Framework,
+            'tool': Tool,
+            'cloud': Cloud,
+            'db': DB
+        }
+        model = tech_map.get(kind)
+        if model:
+            tech = self.session.query(model).filter_by(id=tech_id).first()
+            if tech:
+                tech.proficiency_id = proficiency_id
+                self.session.flush()
+                return True
+        return False
+
     def get_engagements_by_project(self, project_id: int) -> List[Engagement]:
         return self.session.query(Engagement).filter_by(project_id=project_id).order_by(Engagement.site_start).all()
     

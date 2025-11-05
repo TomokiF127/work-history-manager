@@ -133,11 +133,17 @@ class StatsService:
                 else:
                     display = f"{remaining_months}ヶ月"
                 
+                # 習熟度情報を取得
+                proficiency_name = ""
+                if hasattr(tech, 'proficiency') and tech.proficiency:
+                    proficiency_name = tech.proficiency.name
+
                 stats.append({
                     'id': tech.id,
                     'name': tech.name,
                     'months': months,
-                    'display': display
+                    'display': display,
+                    'proficiency': proficiency_name
                 })
         
         stats.sort(key=lambda x: x['months'], reverse=True)

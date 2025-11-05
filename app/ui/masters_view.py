@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QTableView, QPushButton, QLineEdit, QTextEdit,
     QLabel, QMessageBox, QDialog, QDialogButtonBox,
-    QFormLayout, QHeaderView
+    QFormLayout, QHeaderView, QComboBox
 )
 from PySide6.QtCore import Qt, Signal, QAbstractTableModel, QModelIndex
 from PySide6.QtGui import QStandardItemModel, QStandardItem
@@ -16,8 +16,8 @@ class MasterTableModel(QAbstractTableModel):
         super().__init__()
         self.kind = kind
         self.data_list = []
-        # 役割と作業の場合は順序カラムを追加
-        if kind in ['role', 'task']:
+        # 役割と作業と習熟度の場合は順序カラムを追加
+        if kind in ['role', 'task', 'proficiency']:
             self.headers = ["順序", "名称", "備考"]
         else:
             self.headers = ["名称", "備考"]
@@ -38,7 +38,7 @@ class MasterTableModel(QAbstractTableModel):
         col = index.column()
 
         if role == Qt.DisplayRole:
-            if self.kind in ['role', 'task']:
+            if self.kind in ['role', 'task', 'proficiency']:
                 if col == 0:
                     return str(item.get('order_index', 0))
                 elif col == 1:
@@ -70,8 +70,8 @@ class MasterTableModel(QAbstractTableModel):
                 'name': item.name,
                 'note': item.note
             }
-            # 役割と作業の場合はorder_indexも保存
-            if self.kind in ['role', 'task'] and hasattr(item, 'order_index'):
+            # 役割と作業と習熟度の場合はorder_indexも保存
+            if self.kind in ['role', 'task', 'proficiency'] and hasattr(item, 'order_index'):
                 item_dict['order_index'] = item.order_index
             self.data_list.append(item_dict)
         self.endResetModel()
@@ -83,17 +83,29 @@ class MasterEditDialog(QDialog):
         self.master_id = master_id
         self.setWindowTitle("マスタ編集" if master_id else "マスタ追加")
         self.setModal(True)
-        self.resize(400, 200)
-        
+        self.resize(400, 250)
+
         layout = QFormLayout(self)
-        
+
         self.name_edit = QLineEdit()
         layout.addRow("名称:", self.name_edit)
-        
+
         self.note_edit = QTextEdit()
         self.note_edit.setMaximumHeight(80)
         layout.addRow("備考:", self.note_edit)
-        
+
+        # 技術マスタの場合は習熟度選択を追加
+        self.proficiency_combo = None
+        if kind in ['os', 'language', 'framework', 'tool', 'cloud', 'db']:
+            self.proficiency_combo = QComboBox()
+            self.proficiency_combo.addItem("(未選択)", None)
+            with db_service.session_scope() as session:
+                repo = Repository(session)
+                proficiencies = repo.get_master_by_kind('proficiency')
+                for prof in proficiencies:
+                    self.proficiency_combo.addItem(prof.name, prof.id)
+            layout.addRow("習熟度:", self.proficiency_combo)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
             Qt.Horizontal, self
@@ -101,7 +113,7 @@ class MasterEditDialog(QDialog):
         buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
-        
+
         if master_id:
             self.load_data()
     
@@ -113,6 +125,13 @@ class MasterEditDialog(QDialog):
                 if master.id == self.master_id:
                     self.name_edit.setText(master.name)
                     self.note_edit.setText(master.note or "")
+                    # 習熟度が設定されている場合は選択状態にする
+                    if self.proficiency_combo and hasattr(master, 'proficiency_id'):
+                        if master.proficiency_id:
+                            for i in range(self.proficiency_combo.count()):
+                                if self.proficiency_combo.itemData(i) == master.proficiency_id:
+                                    self.proficiency_combo.setCurrentIndex(i)
+                                    break
                     break
     
     def validate_and_accept(self):
@@ -133,10 +152,15 @@ class MasterEditDialog(QDialog):
         self.accept()
     
     def get_data(self):
-        return {
+        data = {
             'name': self.name_edit.text().strip(),
             'note': self.note_edit.toPlainText() or None
         }
+        # 習熟度が選択されている場合は含める
+        if self.proficiency_combo:
+            proficiency_id = self.proficiency_combo.currentData()
+            data['proficiency_id'] = proficiency_id
+        return data
 
 class MasterTabWidget(QWidget):
     data_changed = Signal()
@@ -175,8 +199,8 @@ class MasterTabWidget(QWidget):
         self.delete_button.clicked.connect(self.delete_master)
         button_layout.addWidget(self.delete_button)
 
-        # 役割と作業の場合は並び替えボタンを追加
-        if self.kind in ['role', 'task']:
+        # 役割と作業と習熟度の場合は並び替えボタンを追加
+        if self.kind in ['role', 'task', 'proficiency']:
             button_layout.addStretch()
 
             self.move_up_button = QPushButton("↑ 上へ")
@@ -206,8 +230,13 @@ class MasterTabWidget(QWidget):
             try:
                 with db_service.session_scope() as session:
                     repo = Repository(session)
-                    repo.create_master(self.kind, data['name'], data['note'])
-                
+                    repo.create_master(
+                        self.kind,
+                        data['name'],
+                        data['note'],
+                        data.get('proficiency_id')
+                    )
+
                 self.refresh_data()
                 self.data_changed.emit()
                 QMessageBox.information(self, "成功", f"{self.title}を追加しました")
@@ -219,17 +248,23 @@ class MasterTabWidget(QWidget):
         if not current.isValid():
             QMessageBox.warning(self, "警告", f"{self.title}を選択してください")
             return
-        
+
         master_id = self.model.data(current.siblingAtColumn(0), Qt.UserRole)
-        
+
         dialog = MasterEditDialog(self.kind, master_id, parent=self)
         if dialog.exec_() == QDialog.Accepted:
             data = dialog.get_data()
             try:
                 with db_service.session_scope() as session:
                     repo = Repository(session)
-                    repo.update_master(self.kind, master_id, data['name'], data['note'])
-                
+                    repo.update_master(
+                        self.kind,
+                        master_id,
+                        data['name'],
+                        data['note'],
+                        data.get('proficiency_id')
+                    )
+
                 self.refresh_data()
                 self.data_changed.emit()
                 QMessageBox.information(self, "成功", f"{self.title}を更新しました")
@@ -243,8 +278,8 @@ class MasterTabWidget(QWidget):
             return
 
         master_id = self.model.data(current.siblingAtColumn(0), Qt.UserRole)
-        # 役割・作業の場合は名前が2列目
-        name_col = 1 if self.kind in ['role', 'task'] else 0
+        # 役割・作業・習熟度の場合は名前が2列目
+        name_col = 1 if self.kind in ['role', 'task', 'proficiency'] else 0
         name = self.model.data(current.siblingAtColumn(name_col), Qt.DisplayRole)
 
         reply = QMessageBox.question(
@@ -273,6 +308,7 @@ class MasterTabWidget(QWidget):
             QMessageBox.warning(self, "警告", f"{self.title}を選択してください")
             return
 
+        current_row = current.row()
         master_id = self.model.data(current.siblingAtColumn(0), Qt.UserRole)
 
         try:
@@ -281,9 +317,13 @@ class MasterTabWidget(QWidget):
                 if repo.move_master_up(self.kind, master_id):
                     self.refresh_data()
                     self.data_changed.emit()
-                    # 移動後も同じ行を選択状態に（1つ上になる）
-                    new_row = max(0, current.row() - 1)
-                    self.table_view.selectRow(new_row)
+                    # 上に移動したので、移動後は1つ上の行になる
+                    new_row = max(0, current_row - 1)
+                    # IDで選択を復元
+                    for row in range(self.model.rowCount()):
+                        if self.model.data(self.model.index(row, 0), Qt.UserRole) == master_id:
+                            self.table_view.selectRow(row)
+                            break
                 else:
                     QMessageBox.information(self, "情報", "これ以上上に移動できません")
         except Exception as e:
@@ -296,6 +336,7 @@ class MasterTabWidget(QWidget):
             QMessageBox.warning(self, "警告", f"{self.title}を選択してください")
             return
 
+        current_row = current.row()
         master_id = self.model.data(current.siblingAtColumn(0), Qt.UserRole)
 
         try:
@@ -304,9 +345,13 @@ class MasterTabWidget(QWidget):
                 if repo.move_master_down(self.kind, master_id):
                     self.refresh_data()
                     self.data_changed.emit()
-                    # 移動後も同じ行を選択状態に（1つ下になる）
-                    new_row = min(self.model.rowCount() - 1, current.row() + 1)
-                    self.table_view.selectRow(new_row)
+                    # 下に移動したので、移動後は1つ下の行になる
+                    new_row = min(self.model.rowCount() - 1, current_row + 1)
+                    # IDで選択を復元
+                    for row in range(self.model.rowCount()):
+                        if self.model.data(self.model.index(row, 0), Qt.UserRole) == master_id:
+                            self.table_view.selectRow(row)
+                            break
                 else:
                     QMessageBox.information(self, "情報", "これ以上下に移動できません")
         except Exception as e:
@@ -334,7 +379,8 @@ class MastersView(QWidget):
             ('db', 'データベース'),
             ('qualification', '資格'),
             ('role', '役割'),
-            ('task', '作業担当')
+            ('task', '作業担当'),
+            ('proficiency', '習熟度')
         ]
         
         for kind, title in categories:

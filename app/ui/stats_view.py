@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QTableView, QPushButton, QLabel, QDateEdit,
-    QGroupBox, QMessageBox, QFileDialog, QHeaderView
+    QGroupBox, QMessageBox, QFileDialog, QHeaderView,
+    QComboBox, QStyledItemDelegate
 )
 from PySide6.QtCore import Qt, QDate, Signal, QAbstractTableModel, QModelIndex
 from datetime import date
@@ -13,25 +14,76 @@ from services.export import ExportService
 from services.repository import Repository
 from ui.styles import BUTTON_STYLES
 
+class ProficiencyDelegate(QStyledItemDelegate):
+    """習熟度カラム用のコンボボックスデリゲート"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.proficiencies = []
+        self._load_proficiencies()
+
+    def _load_proficiencies(self):
+        """習熟度リストを読み込み"""
+        with db_service.session_scope() as session:
+            repo = Repository(session)
+            profs = repo.get_master_by_kind('proficiency')
+            self.proficiencies = [(None, "(未選択)")] + [(p.id, p.name) for p in profs]
+
+    def createEditor(self, parent, option, index):
+        """コンボボックスエディタを作成"""
+        combo = QComboBox(parent)
+        for prof_id, prof_name in self.proficiencies:
+            combo.addItem(prof_name, prof_id)
+        return combo
+
+    def setEditorData(self, editor, index):
+        """現在の値をエディタに設定"""
+        current_text = index.data(Qt.DisplayRole)
+        if current_text:
+            idx = editor.findText(current_text)
+            if idx >= 0:
+                editor.setCurrentIndex(idx)
+
+    def setModelData(self, editor, model, index):
+        """エディタの値をモデルに反映"""
+        prof_id = editor.currentData()
+        prof_name = editor.currentText()
+
+        # モデルデータを更新
+        model.stats_data[index.row()]['proficiency'] = prof_name
+        model.dataChanged.emit(index, index)
+
+        # データベースに保存
+        tech_id = model.stats_data[index.row()]['id']
+        kind = model.kind  # kindをモデルから取得
+
+        try:
+            with db_service.session_scope() as session:
+                repo = Repository(session)
+                repo.update_tech_proficiency(kind, tech_id, prof_id)
+        except Exception as e:
+            print(f"習熟度更新エラー: {e}")
+
 class StatsTableModel(QAbstractTableModel):
-    def __init__(self, data=None):
+    def __init__(self, kind=None, data=None):
         super().__init__()
+        self.kind = kind
         self.stats_data = data or []
-        self.headers = ["技術名", "月数", "年月"]
-    
+        self.headers = ["技術名", "月数", "年月", "習熟度"]
+
     def rowCount(self, parent=QModelIndex()):
         return len(self.stats_data)
-    
+
     def columnCount(self, parent=QModelIndex()):
         return len(self.headers)
-    
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-        
+
         item = self.stats_data[index.row()]
         col = index.column()
-        
+
         if role == Qt.DisplayRole:
             if col == 0:
                 return item['name']
@@ -39,7 +91,12 @@ class StatsTableModel(QAbstractTableModel):
                 return str(item['months'])
             elif col == 2:
                 return item['display']
-        
+            elif col == 3:
+                return item.get('proficiency', '')
+        elif role == Qt.UserRole:
+            # tech_idを保存
+            return item.get('id')
+
         return None
     
     def headerData(self, section, orientation, role=Qt.DisplayRole):
@@ -63,31 +120,36 @@ class CategoryStatsTab(QWidget):
     
     def init_ui(self):
         layout = QVBoxLayout(self)
-        
+
         self.summary_label = QLabel("統計データ")
         layout.addWidget(self.summary_label)
-        
+
         self.table_view = QTableView()
-        self.model = StatsTableModel()
+        self.model = StatsTableModel(kind=self.kind)
         self.table_view.setModel(self.model)
+
+        # 習熟度カラム（3列目）にコンボボックスデリゲートを設定
+        proficiency_delegate = ProficiencyDelegate(self.table_view)
+        self.table_view.setItemDelegateForColumn(3, proficiency_delegate)
+
         self.table_view.horizontalHeader().setStretchLastSection(True)
         self.table_view.setAlternatingRowColors(True)
         layout.addWidget(self.table_view)
         
-        export_layout = QHBoxLayout()
-        
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
         self.export_csv_button = QPushButton("CSVエクスポート")
         self.export_csv_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.export_csv_button.clicked.connect(self.export_csv)
-        export_layout.addWidget(self.export_csv_button)
-        
+        button_layout.addWidget(self.export_csv_button)
+
         self.export_md_button = QPushButton("Markdownエクスポート")
         self.export_md_button.setStyleSheet(BUTTON_STYLES['secondary'])
         self.export_md_button.clicked.connect(self.export_md)
-        export_layout.addWidget(self.export_md_button)
-        
-        export_layout.addStretch()
-        layout.addLayout(export_layout)
+        button_layout.addWidget(self.export_md_button)
+
+        layout.addLayout(button_layout)
     
     def refresh_stats(self, start_filter=None, end_filter=None):
         self.start_filter = start_filter

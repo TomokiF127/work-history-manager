@@ -200,34 +200,34 @@ class SkillSheetExportService:
     def _get_project_roles_sorted(self, project_id: int) -> str:
         """プロジェクトの役割を順序で取得"""
         from models import ProjectRole, Role
-        
+
         # プロジェクトに関連する役割を順序で取得
         roles = self.session.query(Role).join(ProjectRole).filter(
             ProjectRole.project_id == project_id
         ).order_by(Role.order_index, Role.name).all()
-        
+
         # 単一プロジェクトの場合は従来通り
         project = self.repo.get_project_by_id(project_id)
         if project and project.role and not roles:
             return project.role.name
-        
-        return ", ".join([role.name for role in roles]) if roles else ""
-    
+
+        return "\n".join([role.name for role in roles]) if roles else ""
+
     def _get_project_tasks_sorted(self, project_id: int) -> str:
         """プロジェクトの作業を順序で取得"""
         from models import ProjectTask, Task
-        
+
         # プロジェクトに関連する作業を順序で取得
         tasks = self.session.query(Task).join(ProjectTask).filter(
             ProjectTask.project_id == project_id
         ).order_by(Task.order_index, Task.name).all()
-        
+
         # 単一プロジェクトの場合は従来通り
         project = self.repo.get_project_by_id(project_id)
         if project and project.task and not tasks:
             return project.task.name
-        
-        return ", ".join([task.name for task in tasks]) if tasks else ""
+
+        return "\n".join([task.name for task in tasks]) if tasks else ""
     
     def _generate_technical_skills_data(self) -> Dict[str, List[Dict[str, Any]]]:
         """技術スキルデータを生成"""
@@ -249,6 +249,7 @@ class SkillSheetExportService:
                 {
                     "name": stat["name"],
                     "experience": stat["display"],
+                    "proficiency": stat.get("proficiency", ""),
                     "months": stat["months"]
                 }
                 for stat in stats
@@ -541,44 +542,41 @@ class SkillSheetExportService:
         skill_run.font.bold = True
         
         if data["technical_skills"]:
-            skill_table = doc.add_table(rows=1, cols=4)
+            skill_table = doc.add_table(rows=1, cols=2)
             self._set_table_borders(skill_table)
-            
+
             # ヘッダー行の設定
             header_cells = skill_table.rows[0].cells
             self._format_header_cell(header_cells[0], "カテゴリ")
             self._format_header_cell(header_cells[1], "技術")
-            self._format_header_cell(header_cells[2], "経験期間")
-            self._format_header_cell(header_cells[3], "補足")
-            
+
             # 列幅設定
-            self._set_cell_properties(header_cells[0], width_cm=2.0)  # カテゴリ
-            self._set_cell_properties(header_cells[1], width_cm=6.0)  # 技術
-            self._set_cell_properties(header_cells[2], width_cm=4.0)  # 経験期間
-            self._set_cell_properties(header_cells[3], width_cm=8.0)  # 補足
-            
+            self._set_cell_properties(header_cells[0], width_cm=3.0)  # カテゴリ
+            self._set_cell_properties(header_cells[1], width_cm=17.0)  # 技術（技術名　期間　習熟度の形式）
+
             # カテゴリ順序をサンプルに合わせる
             category_order = ["OS", "言語", "DB", "FW/ライブラリ", "ツール", "クラウド"]
-            
+
             for category in category_order:
                 if category in data["technical_skills"] and data["technical_skills"][category]:
                     skills = data["technical_skills"][category]
-                    
-                    # 技術名と期間を改行で区切る
-                    tech_names = "\n".join([s["name"] for s in skills])
-                    tech_experiences = "\n".join([s["experience"] for s in skills])
-                    
+
+                    # 技術名、期間、習熟度を結合した形式で出力
+                    tech_lines = []
+                    for s in skills:
+                        parts = [s["name"], s["experience"]]
+                        if s.get("proficiency"):
+                            parts.append(s["proficiency"])
+                        tech_lines.append("　".join(parts))
+
                     row_cells = skill_table.add_row().cells
-                    
+
                     # 各セルの書式設定
-                    for i, cell in enumerate(row_cells):
-                        widths = [2.0, 6.0, 4.0, 8.0]
-                        self._set_cell_properties(cell, width_cm=widths[i], vertical_align='top')
-                    
+                    self._set_cell_properties(row_cells[0], width_cm=3.0, vertical_align='top')
+                    self._set_cell_properties(row_cells[1], width_cm=17.0, vertical_align='top')
+
                     row_cells[0].text = category
-                    row_cells[1].text = tech_names
-                    row_cells[2].text = tech_experiences
-                    row_cells[3].text = ""  # 補足は空欄（将来的に追加可能）
+                    row_cells[1].text = "\n".join(tech_lines)
         
         # 取得資格
         if data["qualifications"]:
