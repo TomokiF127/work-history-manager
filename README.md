@@ -374,6 +374,44 @@ pyinstaller --onefile --windowed --name "WorkHistory" \
   app/main.py
 ```
 
+## よくある質問（FAQ）
+
+### Q: 既にセットアップ済みの場合はどうなりますか？
+
+A: **2回目以降はセットアップメッセージは表示されません。**
+
+起動スクリプトは`venv`フォルダの有無で判断します：
+- **初回起動時**（`venv`がない）: セットアップ確認メッセージが表示される
+- **2回目以降**（`venv`がある）: 直接アプリが起動する
+
+セットアップは初回のみ実行すれば、その後は不要です。
+
+### Q: セットアップで「n」を選んだらどうなりますか？
+
+A: セットアップがスキップされ、アプリは起動しません。
+
+後でアプリを使いたい場合は、再度起動ファイルをダブルクリックして「y」を選択してください。
+
+### Q: セットアップをやり直したい場合は？
+
+A: `venv`フォルダを削除してから起動ファイルを実行してください。
+
+```bash
+# macOS/Linux
+rm -rf venv
+./起動.command
+
+# Windows
+rmdir /s venv
+起動.bat
+```
+
+### Q: Python 3がインストールされていない場合は？
+
+A: セットアップ時にエラーメッセージが表示され、インストール方法が案内されます。
+
+https://www.python.org/downloads/ からPython 3.9以上をインストールしてください。
+
 ## トラブルシューティング
 
 ### Qt関連のエラー
@@ -387,6 +425,21 @@ export QT_QPA_PLATFORM=offscreen  # ヘッドレス環境の場合
 ### 文字化け
 - CSV出力はBOM付きUTF-8で保存されます
 - Excelで開く際は「データ」→「テキストから」でインポート
+
+### 依存パッケージのインストールエラー
+
+ネットワーク環境やPythonのバージョンによってはインストールに失敗する場合があります。
+
+**解決方法:**
+```bash
+# 仮想環境を有効化してから手動でインストール
+source venv/bin/activate  # macOS/Linux
+venv\Scripts\activate     # Windows
+
+# 依存パッケージを再インストール
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
 ## ライセンス
 
