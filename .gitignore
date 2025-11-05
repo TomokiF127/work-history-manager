@@ -144,3 +144,11 @@ ehthumbs_vista.db
 # Application specific
 test_db.py
 import_*.py
+
+# Export files (スキルシート出力ファイル)
+スキルシート_*.docx
+スキルシート_*.md
+*.csv
+*.md
+# Keep README
+!README.md
