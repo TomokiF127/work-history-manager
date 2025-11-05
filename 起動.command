@@ -81,13 +81,31 @@ if [ ! -d "venv" ]; then
     echo "✓ [4/4] 依存パッケージをインストール中..."
     echo "  (この処理には数分かかる場合があります)"
     if [ -f "requirements.txt" ]; then
-        pip install -r requirements.txt
+        # PySide6のインストールエラーを回避するため、エラーを無視してインストール
+        pip install -r requirements.txt 2>&1 | grep -v "TypeError: encode()" | grep -v "SyntaxError: invalid syntax" || true
+
+        # 重要なパッケージがインストールされているか確認
+        python -c "import PySide6; import sqlalchemy; import python_docx" 2>/dev/null
         if [ $? -eq 0 ]; then
             echo "  ✅ 依存パッケージをインストールしました"
         else
-            echo "  ❌ 依存パッケージのインストールに失敗しました"
-            read -p "Enterキーを押して終了..."
-            exit 1
+            echo "  ⚠️  一部のパッケージでエラーが発生しましたが、再試行します..."
+            # PIP_NO_COMPILE=1を設定してコンパイルをスキップ
+            PIP_NO_COMPILE=1 pip install -r requirements.txt --no-cache-dir
+
+            python -c "import PySide6; import sqlalchemy; import python_docx" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                echo "  ✅ 依存パッケージをインストールしました"
+            else
+                echo "  ❌ 依存パッケージのインストールに失敗しました"
+                echo ""
+                echo "手動でインストールを試してください："
+                echo "  source venv/bin/activate"
+                echo "  PIP_NO_COMPILE=1 pip install -r requirements.txt"
+                echo ""
+                read -p "Enterキーを押して終了..."
+                exit 1
+            fi
         fi
     else
         echo "  ❌ requirements.txtが見つかりません"

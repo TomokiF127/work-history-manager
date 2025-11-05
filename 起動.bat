@@ -77,11 +77,27 @@ if not exist "venv" (
     echo ✓ [4/4] 依存パッケージをインストール中...
     echo   (この処理には数分かかる場合があります)
     if exist "requirements.txt" (
-        pip install -r requirements.txt
+        REM PySide6のインストールエラーを回避
+        set PIP_NO_COMPILE=1
+        pip install -r requirements.txt --no-cache-dir 2>nul
+
+        REM 重要なパッケージがインストールされているか確認
+        python -c "import PySide6; import sqlalchemy; import python_docx" 2>nul
         if errorlevel 1 (
-            echo   ❌ 依存パッケージのインストールに失敗しました
-            pause
-            exit /b 1
+            echo   ⚠️  エラーが発生しましたが、再試行します...
+            pip install -r requirements.txt --no-cache-dir
+            python -c "import PySide6; import sqlalchemy; import python_docx" 2>nul
+            if errorlevel 1 (
+                echo   ❌ 依存パッケージのインストールに失敗しました
+                echo.
+                echo   手動でインストールを試してください：
+                echo     venv\Scripts\activate
+                echo     set PIP_NO_COMPILE=1
+                echo     pip install -r requirements.txt
+                echo.
+                pause
+                exit /b 1
+            )
         )
         echo   ✅ 依存パッケージをインストールしました
     ) else (

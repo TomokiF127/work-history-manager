@@ -428,6 +428,27 @@ export QT_QPA_PLATFORM=offscreen  # ヘッドレス環境の場合
 
 ### 依存パッケージのインストールエラー
 
+#### エラー例: `TypeError: encode()` または `SyntaxError: invalid syntax`
+
+PySide6のインストール中にこれらのエラーが発生する場合がありますが、通常は問題ありません。起動スクリプトが自動的に対処します。
+
+手動で対処する場合：
+
+**macOS/Linux:**
+```bash
+source venv/bin/activate
+PIP_NO_COMPILE=1 pip install -r requirements.txt --no-cache-dir
+```
+
+**Windows:**
+```bash
+venv\Scripts\activate
+set PIP_NO_COMPILE=1
+pip install -r requirements.txt --no-cache-dir
+```
+
+#### その他のインストールエラー
+
 ネットワーク環境やPythonのバージョンによってはインストールに失敗する場合があります。
 
 **解決方法:**
